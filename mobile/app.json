@@ -7,10 +7,12 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.fiodobigode.app"
+      "bundleIdentifier": "com.fiodobigode.app",
+      "buildNumber": "1"
     },
     "android": {
-      "package": "com.fiodobigode.app"
+      "package": "com.fiodobigode.app",
+      "versionCode": 1
     }
   }
 }
