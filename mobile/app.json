@@ -2,17 +2,17 @@
   "expo": {
     "name": "Fio do Bigode",
     "slug": "fio-do-bigode-mobile",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.fiodobigode.app",
-      "buildNumber": "3"
+      "buildNumber": "4"
     },
     "android": {
       "package": "com.fiodobigode.app",
-      "versionCode": 3
+      "versionCode": 4
     }
   }
 }
