@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class AuthController extends Controller
@@ -34,8 +35,6 @@ class AuthController extends Controller
         $challenge = (string) random_int(100000, 999999);
         $challengeId = (string) Str::uuid();
         Cache::put('2fa:'.$challengeId, ['user_id'=>$user->id,'code'=>$challenge], now()->addMinutes(5));
-
-        // MVP: enviar o código por provedor de e-mail. Nunca retornar o código em produção.
         return response()->json(['challenge_id'=>$challengeId,'expires_in'=>300,'next'=>'2fa']);
     }
 
@@ -46,6 +45,33 @@ class AuthController extends Controller
         abort_unless($challenge && hash_equals($challenge['code'], $data['code']), 422, 'Token inválido ou expirado.');
         $user = User::findOrFail($challenge['user_id']);
         return response()->json(['token'=>$user->createToken('mobile')->plainTextToken,'user'=>$user]);
+    }
+
+    public function forgotPassword(Request $request)
+    {
+        $data = $request->validate(['email'=>['required','email']]);
+        $user = User::where('email',$data['email'])->first();
+        if ($user) {
+            $plain = Str::random(64);
+            DB::table('password_reset_tokens')->updateOrInsert(
+                ['email'=>$user->email],
+                ['token'=>hash('sha256',$plain),'created_at'=>now()]
+            );
+            // Entregar $plain via e-mail transacional. Nunca persistir token em texto puro.
+        }
+        return response()->json(['message'=>'Se o e-mail existir, enviaremos as instruções de recuperação.']);
+    }
+
+    public function resetPassword(Request $request)
+    {
+        $data = $request->validate(['email'=>['required','email'],'token'=>['required','string','size:64'],'password'=>['required','string','min:10','confirmed']]);
+        $row = DB::table('password_reset_tokens')->where('email',$data['email'])->first();
+        abort_unless($row && hash_equals($row->token, hash('sha256',$data['token'])) && now()->diffInMinutes($row->created_at) <= 30, 422, 'Token inválido ou expirado.');
+        $user = User::where('email',$data['email'])->firstOrFail();
+        $user->update(['password'=>Hash::make($data['password'])]);
+        $user->tokens()->delete();
+        DB::table('password_reset_tokens')->where('email',$data['email'])->delete();
+        return response()->json(['message'=>'Senha redefinida. Faça login novamente.']);
     }
 
     public function me(Request $request) { return $request->user(); }
