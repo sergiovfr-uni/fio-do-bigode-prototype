@@ -22,29 +22,87 @@ class AuthController extends Controller
             'password' => ['required','string','min:10'],
         ]);
 
-        $user = User::create([...$data, 'password' => Hash::make($data['password']), 'kyc_status' => 'pending']);
-        return response()->json(['user' => $user, 'next' => 'kyc'], 201);
+        $user = User::create([
+            ...$data,
+            'password' => Hash::make($data['password']),
+            'kyc_status' => 'pending',
+            'risk_score' => 50,
+            'reputation_score' => 0,
+        ]);
+
+        return response()->json([
+            'user' => $user,
+            'next' => 'kyc',
+            'message' => 'Cadastro criado. Conclua a validação de identidade antes de operar.',
+        ], 201);
     }
 
     public function login(Request $request)
     {
-        $data = $request->validate(['email'=>['required','email'],'password'=>['required','string']]);
+        $data = $request->validate([
+            'email'=>['required','email'],
+            'password'=>['required','string'],
+        ]);
+
         $user = User::where('email', $data['email'])->first();
         abort_unless($user && Hash::check($data['password'], $user->password), 422, 'Credenciais inválidas.');
 
         $challenge = (string) random_int(100000, 999999);
         $challengeId = (string) Str::uuid();
-        Cache::put('2fa:'.$challengeId, ['user_id'=>$user->id,'code'=>$challenge], now()->addMinutes(5));
-        return response()->json(['challenge_id'=>$challengeId,'expires_in'=>300,'next'=>'2fa']);
+        Cache::put('2fa:'.$challengeId, [
+            'user_id'=>$user->id,
+            'code'=>$challenge,
+            'attempts'=>0,
+        ], now()->addMinutes(5));
+
+        $payload = [
+            'challenge_id'=>$challengeId,
+            'expires_in'=>300,
+            'next'=>'2fa',
+            'delivery'=>'email',
+            'masked_destination'=>$this->maskEmail($user->email),
+        ];
+
+        // Somente homologação: permite testar o fluxo antes do provedor de e-mail transacional.
+        if (env('FDB_HOMOLOGATION_MODE', false)) {
+            $payload['homologation_code'] = $challenge;
+        }
+
+        return response()->json($payload);
     }
 
     public function verifyTwoFactor(Request $request)
     {
-        $data = $request->validate(['challenge_id'=>['required','uuid'],'code'=>['required','digits:6']]);
-        $challenge = Cache::pull('2fa:'.$data['challenge_id']);
-        abort_unless($challenge && hash_equals($challenge['code'], $data['code']), 422, 'Token inválido ou expirado.');
+        $data = $request->validate([
+            'challenge_id'=>['required','uuid'],
+            'code'=>['required','digits:6'],
+        ]);
+
+        $cacheKey = '2fa:'.$data['challenge_id'];
+        $challenge = Cache::get($cacheKey);
+        abort_unless($challenge, 422, 'Token inválido ou expirado.');
+
+        $attempts = (int)($challenge['attempts'] ?? 0) + 1;
+        if ($attempts > 5) {
+            Cache::forget($cacheKey);
+            abort(429, 'Muitas tentativas. Faça login novamente.');
+        }
+
+        if (!hash_equals((string)$challenge['code'], (string)$data['code'])) {
+            $challenge['attempts'] = $attempts;
+            Cache::put($cacheKey, $challenge, now()->addMinutes(5));
+            abort(422, 'Token inválido ou expirado.');
+        }
+
+        Cache::forget($cacheKey);
         $user = User::findOrFail($challenge['user_id']);
-        return response()->json(['token'=>$user->createToken('mobile')->plainTextToken,'user'=>$user]);
+        $user->tokens()->where('name', 'mobile')->delete();
+
+        return response()->json([
+            'token'=>$user->createToken('mobile')->plainTextToken,
+            'token_type'=>'Bearer',
+            'user'=>$user,
+        ]);
     }
 
     public function forgotPassword(Request $request)
@@ -57,14 +115,17 @@ class AuthController extends Controller
                 ['email'=>$user->email],
                 ['token'=>hash('sha256',$plain),'created_at'=>now()]
             );
-            // Entregar $plain via e-mail transacional. Nunca persistir token em texto puro.
         }
         return response()->json(['message'=>'Se o e-mail existir, enviaremos as instruções de recuperação.']);
     }
 
     public function resetPassword(Request $request)
     {
-        $data = $request->validate(['email'=>['required','email'],'token'=>['required','string','size:64'],'password'=>['required','string','min:10','confirmed']]);
+        $data = $request->validate([
+            'email'=>['required','email'],
+            'token'=>['required','string','size:64'],
+            'password'=>['required','string','min:10','confirmed'],
+        ]);
         $row = DB::table('password_reset_tokens')->where('email',$data['email'])->first();
         abort_unless($row && hash_equals($row->token, hash('sha256',$data['token'])) && now()->diffInMinutes($row->created_at) <= 30, 422, 'Token inválido ou expirado.');
         $user = User::where('email',$data['email'])->firstOrFail();
@@ -74,6 +135,21 @@ class AuthController extends Controller
         return response()->json(['message'=>'Senha redefinida. Faça login novamente.']);
     }
 
-    public function me(Request $request) { return $request->user(); }
-    public function logout(Request $request) { $request->user()->currentAccessToken()?->delete(); return response()->noContent(); }
+    public function me(Request $request)
+    {
+        return response()->json($request->user());
+    }
+
+    public function logout(Request $request)
+    {
+        $request->user()->currentAccessToken()?->delete();
+        return response()->noContent();
+    }
+
+    private function maskEmail(string $email): string
+    {
+        [$local, $domain] = explode('@', $email, 2);
+        $visible = mb_substr($local, 0, min(2, mb_strlen($local)));
+        return $visible.str_repeat('*', max(2, mb_strlen($local)-2)).'@'.$domain;
+    }
 }
