@@ -1,0 +1,211 @@
+openapi: 3.0.3
+info:
+  title: Fio do Bigode API
+  version: 0.1.0
+servers:
+  - url: https://api.fiodobigode.com.br/v1
+paths:
+  /auth/login:
+    post:
+      summary: Inicia login e desafio 2FA
+      responses:
+        '200': { description: Desafio criado }
+  /auth/2fa/verify:
+    post:
+      summary: Valida token 2FA e emite sessão
+      responses:
+        '200': { description: Sessão autenticada }
+  /auth/password/forgot:
+    post:
+      summary: Solicita recuperação de senha
+      responses:
+        '202': { description: Solicitação recebida }
+  /me:
+    get:
+      summary: Perfil autenticado, plano, KYC e reputação
+      responses:
+        '200': { description: Perfil }
+  /me/legal-acceptances:
+    get:
+      summary: Lista aceites jurídicos do usuário
+      responses:
+        '200': { description: Aceites }
+    post:
+      summary: Registra aceite de documento jurídico versionado
+      responses:
+        '201': { description: Aceite registrado }
+  /me/risk:
+    get:
+      summary: Retorna Risk Score atual e nível permitido ao usuário
+      responses:
+        '200': { description: Risk Score }
+  /plans:
+    get:
+      summary: Lista planos e entitlements
+      responses:
+        '200': { description: Planos }
+  /subscriptions:
+    post:
+      summary: Cria/solicita assinatura recorrente
+      responses:
+        '201': { description: Assinatura criada }
+  /listings:
+    get:
+      summary: Lista classificados ativos
+      responses:
+        '200': { description: Classificados }
+    post:
+      summary: Cria anúncio respeitando limite do plano
+      responses:
+        '201': { description: Anúncio criado }
+        '409': { description: Limite do plano atingido }
+  /listings/{listingId}:
+    get:
+      summary: Exibe detalhes do anúncio
+      parameters:
+        - in: path
+          name: listingId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Anúncio }
+  /listings/{listingId}/proposals:
+    post:
+      summary: Gera negociação e proposta vinculadas ao anúncio
+      parameters:
+        - in: path
+          name: listingId
+          required: true
+          schema: { type: string }
+      responses:
+        '201': { description: Negociação/proposta criada }
+  /negotiations:
+    get:
+      summary: Lista negociações do usuário
+      responses:
+        '200': { description: Negociações }
+    post:
+      summary: Cria negociação direta
+      responses:
+        '201': { description: Negociação criada }
+  /negotiations/{negotiationId}:
+    get:
+      summary: Dossiê completo da negociação
+      parameters:
+        - in: path
+          name: negotiationId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Dossiê }
+  /negotiations/{negotiationId}/counter-offers:
+    post:
+      summary: Cria nova versão de proposta sem liberar contrato
+      parameters:
+        - in: path
+          name: negotiationId
+          required: true
+          schema: { type: string }
+      responses:
+        '201': { description: Contraproposta criada }
+  /negotiations/{negotiationId}/proposals/{version}/accept:
+    post:
+      summary: Aceita explicitamente a versão atual da proposta
+      parameters:
+        - in: path
+          name: negotiationId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: version
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: Condições consolidadas }
+  /negotiations/{negotiationId}/documents:
+    post:
+      summary: Registra documento vinculado à negociação
+      parameters:
+        - in: path
+          name: negotiationId
+          required: true
+          schema: { type: string }
+      responses:
+        '201': { description: Documento registrado }
+  /negotiations/{negotiationId}/signed-contract:
+    post:
+      summary: Importa contrato assinado por todas as partes e ativa quando elegível
+      parameters:
+        - in: path
+          name: negotiationId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Documento aceito/status atualizado }
+  /wallet:
+    get:
+      summary: Retorna wallet e saldo disponível
+      responses:
+        '200': { description: Wallet }
+  /wallet/transactions:
+    get:
+      summary: Extrato da wallet
+      responses:
+        '200': { description: Transações }
+  /ads/home:
+    get:
+      summary: Campanhas elegíveis para a Home
+      responses:
+        '200': { description: Campanhas }
+  /ads/{campaignId}/impressions:
+    post:
+      summary: Registra impressão qualificada
+      parameters:
+        - in: path
+          name: campaignId
+          required: true
+          schema: { type: integer }
+      responses:
+        '202': { description: Evento aceito }
+  /ads/{campaignId}/clicks:
+    post:
+      summary: Registra clique
+      parameters:
+        - in: path
+          name: campaignId
+          required: true
+          schema: { type: integer }
+      responses:
+        '202': { description: Evento aceito }
+  /admin/dashboard:
+    get:
+      summary: KPIs do Admin
+      responses:
+        '200': { description: Dashboard }
+  /admin/risk/reviews:
+    get:
+      summary: Fila de revisão manual de risco/KYC
+      responses:
+        '200': { description: Revisões }
+  /admin/campaigns:
+    get:
+      summary: Lista campanhas publicitárias
+      responses:
+        '200': { description: Campanhas }
+    post:
+      summary: Cria campanha
+      responses:
+        '201': { description: Campanha criada }
+  /admin/plans:
+    get:
+      summary: Lista configuração dos planos
+      responses:
+        '200': { description: Planos }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []
