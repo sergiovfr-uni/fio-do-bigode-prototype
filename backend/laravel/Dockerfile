@@ -4,7 +4,9 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www/html
 COPY . .
 ENV COMPOSER_ALLOW_SUPERUSER=1
+RUN mkdir -p bootstrap/cache storage/framework/cache/data storage/framework/sessions storage/framework/views storage/app/private storage/app/public storage/logs \
+    && chmod -R 775 bootstrap/cache storage
 RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
-RUN mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/app/private storage/app/public storage/logs bootstrap/cache && chown -R www-data:www-data storage bootstrap/cache
+RUN chown -R www-data:www-data storage bootstrap/cache
 EXPOSE 8080
 CMD php artisan config:cache && php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=${PORT:-8080}
