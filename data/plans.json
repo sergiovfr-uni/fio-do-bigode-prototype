@@ -1,0 +1,8 @@
+{
+  "plans": [
+    {"id":"trial","name":"Free Trial","price_monthly":0,"trial_days":60,"active_ads_limit":1,"negotiations_limit":5,"featured_ads":0},
+    {"id":"bronze","name":"Bronze","price_monthly":14.90,"active_ads_limit":3,"negotiations_limit":20,"featured_ads":0},
+    {"id":"silver","name":"Prata","price_monthly":29.90,"active_ads_limit":10,"negotiations_limit":100,"featured_ads":1},
+    {"id":"gold","name":"Ouro","price_monthly":49.90,"active_ads_limit":30,"negotiations_limit":-1,"featured_ads":3}
+  ]
+}
