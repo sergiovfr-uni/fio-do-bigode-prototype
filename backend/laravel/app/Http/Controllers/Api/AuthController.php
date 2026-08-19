@@ -47,6 +47,18 @@ class AuthController extends Controller
         $user = User::where('email', $data['email'])->first();
         abort_unless($user && Hash::check($data['password'], $user->password), 422, 'Credenciais inválidas.');
 
+        // Homologação temporária: autentica diretamente, sem 2FA.
+        if (env('FDB_HOMOLOGATION_MODE', false)) {
+            $user->tokens()->where('name', 'mobile')->delete();
+            return response()->json([
+                'token'=>$user->createToken('mobile')->plainTextToken,
+                'token_type'=>'Bearer',
+                'user'=>$user,
+                'next'=>'authenticated',
+                'two_factor_required'=>false,
+            ]);
+        }
+
         $challenge = (string) random_int(100000, 999999);
         $challengeId = (string) Str::uuid();
         Cache::put('2fa:'.$challengeId, [
@@ -55,20 +67,13 @@ class AuthController extends Controller
             'attempts'=>0,
         ], now()->addMinutes(5));
 
-        $payload = [
+        return response()->json([
             'challenge_id'=>$challengeId,
             'expires_in'=>300,
             'next'=>'2fa',
             'delivery'=>'email',
             'masked_destination'=>$this->maskEmail($user->email),
-        ];
-
-        // Somente homologação: permite testar o fluxo antes do provedor de e-mail transacional.
-        if (env('FDB_HOMOLOGATION_MODE', false)) {
-            $payload['homologation_code'] = $challenge;
-        }
-
-        return response()->json($payload);
+        ]);
     }
 
     public function verifyTwoFactor(Request $request)
