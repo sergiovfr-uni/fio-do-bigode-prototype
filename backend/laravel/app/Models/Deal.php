@@ -15,4 +15,5 @@ class Deal extends Model
     public function buyer(){ return $this->belongsTo(User::class,'buyer_id'); }
     public function listing(){ return $this->belongsTo(Listing::class); }
     public function offers(){ return $this->hasMany(DealOffer::class); }
+    public function installments(){ return $this->hasMany(Installment::class)->orderBy('number'); }
 }
