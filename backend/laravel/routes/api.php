@@ -7,6 +7,9 @@ use App\Http\Controllers\Api\ListingController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\ComplianceController;
 use App\Http\Controllers\Api\DealDocumentController;
+use App\Http\Controllers\Api\InstallmentController;
+use App\Http\Controllers\Api\WalletController;
+use App\Http\Controllers\Api\AdminController;
 
 Route::prefix('v1')->group(function () {
     Route::post('/auth/register', [AuthController::class, 'register']);
@@ -22,19 +25,26 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
-
         Route::get('/compliance/consents', [ComplianceController::class, 'consents']);
         Route::post('/compliance/consents', [ComplianceController::class, 'acceptConsent']);
         Route::post('/compliance/kyc', [ComplianceController::class, 'submitKyc']);
 
         Route::post('/listings', [ListingController::class, 'store']);
         Route::post('/listings/{listing}/proposals', [DealController::class, 'fromListing']);
-
         Route::get('/deals', [DealController::class, 'index']);
         Route::post('/deals', [DealController::class, 'store']);
         Route::post('/deals/{deal}/counteroffers', [DealController::class, 'counteroffer']);
         Route::post('/deals/{deal}/accept', [DealController::class, 'accept']);
         Route::get('/deals/{deal}/documents', [DealDocumentController::class, 'index']);
         Route::post('/deals/{deal}/documents', [DealDocumentController::class, 'store']);
+        Route::get('/deals/{deal}/installments', [InstallmentController::class, 'index']);
+        Route::post('/deals/{deal}/installments/{installment}/paid', [InstallmentController::class, 'markPaid']);
+        Route::get('/wallet', [WalletController::class, 'show']);
+
+        Route::prefix('admin')->group(function(){
+            Route::get('/dashboard', [AdminController::class, 'dashboard']);
+            Route::get('/users', [AdminController::class, 'users']);
+            Route::get('/deals', [AdminController::class, 'deals']);
+        });
     });
 });
