@@ -1,0 +1,32 @@
+{
+  "placement": "home_primary",
+  "rotation_seconds": 8,
+  "campaigns": [
+    {
+      "id": "camp_auto_001",
+      "advertiser": "Auto Proteção Parceira",
+      "label": "Parceiro Fio do Bigode",
+      "headline": "Proteção para seu veículo negociado",
+      "cta": "Conhecer oferta",
+      "destination": "#",
+      "starts_at": "2026-08-01",
+      "ends_at": "2026-09-30",
+      "priority": 10,
+      "active": true,
+      "theme": "gold"
+    },
+    {
+      "id": "camp_doc_002",
+      "advertiser": "Consulta Segura",
+      "label": "Parceiro Fio do Bigode",
+      "headline": "Consulte informações antes de fechar negócio",
+      "cta": "Ver serviço",
+      "destination": "#",
+      "starts_at": "2026-08-01",
+      "ends_at": "2026-10-31",
+      "priority": 8,
+      "active": true,
+      "theme": "dark"
+    }
+  ]
+}
