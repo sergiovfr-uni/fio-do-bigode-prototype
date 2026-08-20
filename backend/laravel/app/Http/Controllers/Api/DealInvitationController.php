@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Deal;
 use App\Models\DealOffer;
 use App\Models\User;
+use App\Services\DealEventService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -72,15 +73,17 @@ class DealInvitationController extends Controller
         ], 201);
     }
 
-    public function accept(Request $request, string $code)
+    public function accept(Request $request, string $code, DealEventService $events)
     {
         $user = $request->user();
         abort_unless($user->kyc_status === 'verified', 403, 'Conclua o KYC antes de entrar na negociação.');
+        $inviteCreatorId = null;
 
-        $deal = DB::transaction(function () use ($code, $user) {
+        $deal = DB::transaction(function () use ($code, $user, &$inviteCreatorId) {
             $invite = DB::table('deal_invitations')->where('code', strtoupper($code))->lockForUpdate()->first();
             abort_unless($invite && $invite->status === 'pending' && (!$invite->expires_at || now()->lte($invite->expires_at)), 404, 'Convite inválido ou expirado.');
             abort_if((int)$invite->created_by === (int)$user->id, 422, 'O criador não pode aceitar o próprio convite.');
+            $inviteCreatorId = (int)$invite->created_by;
 
             $sellerId = $invite->initiator_role === 'seller' ? $invite->created_by : $user->id;
             $buyerId = $invite->initiator_role === 'buyer' ? $invite->created_by : $user->id;
@@ -96,6 +99,9 @@ class DealInvitationController extends Controller
             DB::table('deal_invitations')->where('id',$invite->id)->update(['status'=>'accepted','accepted_by'=>$user->id,'accepted_at'=>now(),'updated_at'=>now()]);
             return $deal;
         });
+
+        $events->record($deal,$user->id,'invite_accepted',['code'=>strtoupper($code)]);
+        $events->notify($deal,$inviteCreatorId,'invite_accepted','Convite aceito',$user->name.' entrou na negociação '.$deal->title.'.',['deal_id'=>$deal->id]);
 
         return response()->json($deal->load(['seller:id,name,reputation_score','buyer:id,name,reputation_score','offers']), 201);
     }
