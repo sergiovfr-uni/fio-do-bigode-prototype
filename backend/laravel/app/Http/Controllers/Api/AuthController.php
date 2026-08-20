@@ -30,6 +30,7 @@ class AuthController extends Controller
             'reputation_score' => 0,
             'account_status' => 'active',
         ]);
+        $this->ensureFreeTrial($user);
         $token = $user->createToken('mobile')->plainTextToken;
 
         return response()->json([
@@ -37,7 +38,7 @@ class AuthController extends Controller
             'token_type'=>'Bearer',
             'user'=>$user,
             'next'=>'kyc',
-            'message'=>'Cadastro criado. Conclua a validação de identidade antes de operar.',
+            'message'=>'Cadastro criado com Free Trial de 30 dias. Conclua a validação de identidade antes de operar.',
         ], 201);
     }
 
@@ -51,8 +52,8 @@ class AuthController extends Controller
         $user = User::where('email', $data['email'])->first();
         abort_unless($user && Hash::check($data['password'], $user->password), 422, 'Credenciais inválidas.');
         abort_unless(($user->account_status ?? 'active') === 'active', 403, 'Esta conta está bloqueada ou em processo de exclusão.');
+        $this->ensureFreeTrial($user);
 
-        // 2FA temporariamente removido para a fase atual de homologação.
         $user->tokens()->where('name', 'mobile')->delete();
 
         return response()->json([
@@ -137,6 +138,23 @@ class AuthController extends Controller
     {
         $request->user()->currentAccessToken()?->delete();
         return response()->noContent();
+    }
+
+    private function ensureFreeTrial(User $user): void
+    {
+        $hasCurrent = DB::table('subscriptions')->where('user_id',$user->id)
+            ->whereIn('status',['trial','active'])
+            ->where(function($q){$q->whereNull('current_period_ends_at')->orWhere('current_period_ends_at','>',now());})
+            ->exists();
+        if ($hasCurrent) return;
+
+        $planId = DB::table('plans')->where('slug','trial')->value('id');
+        if (!$planId) return;
+        DB::table('subscriptions')->insert([
+            'user_id'=>$user->id,'plan_id'=>$planId,'status'=>'trial',
+            'trial_ends_at'=>now()->addDays(30),'current_period_ends_at'=>now()->addDays(30),
+            'gateway'=>null,'external_id'=>null,'created_at'=>now(),'updated_at'=>now(),
+        ]);
     }
 
     private function maskEmail(string $email): string
