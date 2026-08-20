@@ -47,7 +47,8 @@ class DealInvitationController extends Controller
     {
         $user = $request->user();
         abort_unless($user->kyc_status === 'verified', 403, 'Conclua a validação de identidade antes de criar uma negociação.');
-        $this->assertDirectDealEntitlement($user);
+
+        // Homologação: negociações diretas ficam sem limite para permitir validação completa da jornada.
 
         $data = $request->validate([
             'initiator_role'=>['required','in:seller,buyer'],'invitee_name'=>['nullable','string','max:160'],
@@ -104,17 +105,6 @@ class DealInvitationController extends Controller
         $events->notify($deal,$inviteCreatorId,'invite_accepted','Convite aceito',$user->name.' entrou na negociação '.$deal->title.'.',['deal_id'=>$deal->id]);
 
         return response()->json($deal->load(['seller:id,name,reputation_score','buyer:id,name,reputation_score','offers']), 201);
-    }
-
-    private function assertDirectDealEntitlement(User $user): void
-    {
-        $plan = DB::table('subscriptions')->join('plans','plans.id','=','subscriptions.plan_id')
-            ->where('subscriptions.user_id',$user->id)->whereIn('subscriptions.status',['trial','active'])
-            ->orderByDesc('subscriptions.id')->select('plans.*')->first()
-            ?? DB::table('plans')->where('slug','trial')->first();
-        $limit = (int)($plan->direct_deal_limit ?? 1);
-        $used = DB::table('deal_invitations')->where('created_by',$user->id)->whereIn('status',['pending','accepted'])->where('created_at','>=',now()->startOfMonth())->count();
-        abort_if($limit > 0 && $used >= $limit, 403, 'Limite de negociações diretas do seu plano atingido.');
     }
 
     private function newCode(): string
