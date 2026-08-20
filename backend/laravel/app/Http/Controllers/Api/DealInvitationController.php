@@ -12,6 +12,21 @@ use Illuminate\Support\Str;
 
 class DealInvitationController extends Controller
 {
+    public function index(Request $request)
+    {
+        return DB::table('deal_invitations')
+            ->where('created_by', $request->user()->id)
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn($i) => [
+                'code'=>$i->code,'title'=>$i->title,'description'=>$i->description,'status'=>$i->status,
+                'invitee_name'=>$i->invitee_name,'invitee_email'=>$i->invitee_email,'invitee_phone'=>$i->invitee_phone,
+                'initiator_role'=>$i->initiator_role,'total_amount'=>$i->total_amount,'down_payment'=>$i->down_payment,
+                'installments'=>$i->installments,'monthly_interest'=>$i->monthly_interest,'expires_at'=>$i->expires_at,
+                'invite_url'=>'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html?invite='.$i->code,
+            ]);
+    }
+
     public function show(string $code)
     {
         $invite = DB::table('deal_invitations')->where('code', strtoupper($code))->first();
@@ -19,14 +34,9 @@ class DealInvitationController extends Controller
         $creator = User::find($invite->created_by);
 
         return response()->json([
-            'code'=>$invite->code,
-            'title'=>$invite->title,
-            'description'=>$invite->description,
-            'total_amount'=>$invite->total_amount,
-            'down_payment'=>$invite->down_payment,
-            'installments'=>$invite->installments,
-            'monthly_interest'=>$invite->monthly_interest,
-            'initiator_role'=>$invite->initiator_role,
+            'code'=>$invite->code,'title'=>$invite->title,'description'=>$invite->description,
+            'total_amount'=>$invite->total_amount,'down_payment'=>$invite->down_payment,'installments'=>$invite->installments,
+            'monthly_interest'=>$invite->monthly_interest,'initiator_role'=>$invite->initiator_role,
             'created_by'=>['name'=>$creator?->name,'reputation_score'=>$creator?->reputation_score,'kyc_status'=>$creator?->kyc_status],
             'expires_at'=>$invite->expires_at,
         ]);
@@ -39,32 +49,26 @@ class DealInvitationController extends Controller
         $this->assertDirectDealEntitlement($user);
 
         $data = $request->validate([
-            'initiator_role'=>['required','in:seller,buyer'],
-            'invitee_name'=>['nullable','string','max:160'],
-            'invitee_email'=>['nullable','email','max:255'],
-            'invitee_phone'=>['nullable','string','max:20'],
-            'title'=>['required','string','max:180'],
-            'description'=>['required','string','max:5000'],
-            'total_amount'=>['required','numeric','min:0.01'],
-            'down_payment'=>['nullable','numeric','min:0'],
-            'installments'=>['required','integer','min:1','max:120'],
-            'monthly_interest'=>['nullable','numeric','min:0','max:20'],
+            'initiator_role'=>['required','in:seller,buyer'],'invitee_name'=>['nullable','string','max:160'],
+            'invitee_email'=>['nullable','email','max:255'],'invitee_phone'=>['nullable','string','max:20'],
+            'title'=>['required','string','max:180'],'description'=>['required','string','max:5000'],
+            'total_amount'=>['required','numeric','min:0.01'],'down_payment'=>['nullable','numeric','min:0'],
+            'installments'=>['required','integer','min:1','max:120'],'monthly_interest'=>['nullable','numeric','min:0','max:20'],
         ]);
 
         $code = $this->newCode();
+        $expires = now()->addDays(7);
         DB::table('deal_invitations')->insert([
             'code'=>$code,'created_by'=>$user->id,'initiator_role'=>$data['initiator_role'],
             'invitee_name'=>$data['invitee_name']??null,'invitee_email'=>$data['invitee_email']??null,'invitee_phone'=>$data['invitee_phone']??null,
             'title'=>$data['title'],'description'=>$data['description'],'total_amount'=>$data['total_amount'],
             'down_payment'=>$data['down_payment']??0,'installments'=>$data['installments'],'monthly_interest'=>$data['monthly_interest']??0,
-            'status'=>'pending','expires_at'=>now()->addDays(7),'created_at'=>now(),'updated_at'=>now(),
+            'status'=>'pending','expires_at'=>$expires,'created_at'=>now(),'updated_at'=>now(),
         ]);
 
         return response()->json([
-            'code'=>$code,
-            'invite_url'=>'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html?invite='.$code,
-            'expires_at'=>now()->addDays(7)->toIso8601String(),
-            'message'=>'Convite criado. Compartilhe o link ou o código com a outra parte.',
+            'code'=>$code,'invite_url'=>'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html?invite='.$code,
+            'expires_at'=>$expires->toIso8601String(),'message'=>'Convite criado. Compartilhe o link ou o código com a outra parte.',
         ], 201);
     }
 
@@ -72,11 +76,12 @@ class DealInvitationController extends Controller
     {
         $user = $request->user();
         abort_unless($user->kyc_status === 'verified', 403, 'Conclua o KYC antes de entrar na negociação.');
-        $invite = DB::table('deal_invitations')->where('code', strtoupper($code))->lockForUpdate()->first();
-        abort_unless($invite && $invite->status === 'pending' && (!$invite->expires_at || now()->lte($invite->expires_at)), 404, 'Convite inválido ou expirado.');
-        abort_if((int)$invite->created_by === (int)$user->id, 422, 'O criador não pode aceitar o próprio convite.');
 
-        $deal = DB::transaction(function () use ($invite, $user) {
+        $deal = DB::transaction(function () use ($code, $user) {
+            $invite = DB::table('deal_invitations')->where('code', strtoupper($code))->lockForUpdate()->first();
+            abort_unless($invite && $invite->status === 'pending' && (!$invite->expires_at || now()->lte($invite->expires_at)), 404, 'Convite inválido ou expirado.');
+            abort_if((int)$invite->created_by === (int)$user->id, 422, 'O criador não pode aceitar o próprio convite.');
+
             $sellerId = $invite->initiator_role === 'seller' ? $invite->created_by : $user->id;
             $buyerId = $invite->initiator_role === 'buyer' ? $invite->created_by : $user->id;
             $deal = Deal::create([
