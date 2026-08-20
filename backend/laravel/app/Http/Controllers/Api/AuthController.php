@@ -28,12 +28,16 @@ class AuthController extends Controller
             'kyc_status' => 'pending',
             'risk_score' => 50,
             'reputation_score' => 0,
+            'account_status' => 'active',
         ]);
+        $token = $user->createToken('mobile')->plainTextToken;
 
         return response()->json([
-            'user' => $user,
-            'next' => 'kyc',
-            'message' => 'Cadastro criado. Conclua a validação de identidade antes de operar.',
+            'token'=>$token,
+            'token_type'=>'Bearer',
+            'user'=>$user,
+            'next'=>'kyc',
+            'message'=>'Cadastro criado. Conclua a validação de identidade antes de operar.',
         ], 201);
     }
 
@@ -46,6 +50,7 @@ class AuthController extends Controller
 
         $user = User::where('email', $data['email'])->first();
         abort_unless($user && Hash::check($data['password'], $user->password), 422, 'Credenciais inválidas.');
+        abort_unless(($user->account_status ?? 'active') === 'active', 403, 'Esta conta está bloqueada ou em processo de exclusão.');
 
         // 2FA temporariamente removido para a fase atual de homologação.
         $user->tokens()->where('name', 'mobile')->delete();
@@ -54,7 +59,7 @@ class AuthController extends Controller
             'token'=>$user->createToken('mobile')->plainTextToken,
             'token_type'=>'Bearer',
             'user'=>$user,
-            'next'=>'authenticated',
+            'next'=>$user->kyc_status === 'verified' ? 'authenticated' : 'kyc',
             'two_factor_required'=>false,
         ]);
     }
