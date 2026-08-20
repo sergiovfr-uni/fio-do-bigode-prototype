@@ -55,31 +55,23 @@ class ComplianceController extends Controller
 
     public function requestAccountDeletion(Request $request)
     {
-        $data = $request->validate([
-            'reason' => ['nullable','string','max:500'],
-        ]);
+        $data = $request->validate(['reason' => ['nullable','string','max:500']]);
 
-        $existing = DB::table('account_deletion_requests')
-            ->where('user_id', $request->user()->id)
-            ->where('status', 'pending')
-            ->first();
-
-        if (!$existing) {
-            DB::table('account_deletion_requests')->insert([
-                'user_id'=>$request->user()->id,
-                'status'=>'pending',
-                'reason'=>$data['reason']??null,
-                'requested_at'=>now(),
-                'created_at'=>now(),
-                'updated_at'=>now(),
-            ]);
-        }
-
-        $request->user()->tokens()->delete();
+        DB::transaction(function () use ($request, $data) {
+            $existing = DB::table('account_deletion_requests')->where('user_id',$request->user()->id)->where('status','pending')->first();
+            if (!$existing) {
+                DB::table('account_deletion_requests')->insert([
+                    'user_id'=>$request->user()->id,'status'=>'pending','reason'=>$data['reason']??null,
+                    'requested_at'=>now(),'created_at'=>now(),'updated_at'=>now(),
+                ]);
+            }
+            $request->user()->update(['account_status'=>'deletion_pending','deletion_requested_at'=>now()]);
+            $request->user()->tokens()->delete();
+        });
 
         return response()->json([
-            'status'=>'pending',
-            'message'=>'Solicitação de exclusão registrada. A conta será bloqueada para nova autenticação quando o fluxo definitivo de exclusão/anônimização for ativado.',
+            'status'=>'deletion_pending',
+            'message'=>'Solicitação registrada e acesso à conta bloqueado. Dados sujeitos a obrigação legal poderão ser retidos pelo prazo aplicável e os demais serão excluídos ou anonimizados no processamento definitivo.',
         ], 202);
     }
 }
