@@ -30,7 +30,7 @@ class DealController extends Controller
         $seller = User::findOrFail($listing->seller_id);
         abort_unless($seller->kyc_status === 'verified', 422, 'O vendedor precisa estar com identidade verificada.');
         $data = $this->offerData($request);
-        $deal = DB::transaction(fn()=> $this->createDealWithOffer($listing->seller_id,$request->user()->id,$data,'classified',$listing->id,$request->user()->id));
+        $deal = DB::transaction(fn()=> $this->createDealWithOffer($listing->seller_id,$request->user()->id,$data,'classified',$listing->id,$request->user()->id,$listing->title,$listing->description));
         return response()->json($deal->load(['listing','seller:id,name','buyer:id,name','offers']), 201);
     }
 
@@ -45,7 +45,7 @@ class DealController extends Controller
         $buyer = User::findOrFail($data['buyer_id']);
         abort_unless($buyer->kyc_status === 'verified', 422, 'O comprador precisa estar com identidade verificada.');
         $offer = collect($data)->only(['total_amount','down_payment','installments','monthly_interest'])->all();
-        $deal = DB::transaction(fn()=> $this->createDealWithOffer($request->user()->id,$buyer->id,$offer,'direct',null,$request->user()->id));
+        $deal = DB::transaction(fn()=> $this->createDealWithOffer($request->user()->id,$buyer->id,$offer,'direct',null,$request->user()->id,$data['title'],$data['description']));
         return response()->json($deal->load(['seller:id,name','buyer:id,name','offers']), 201);
     }
 
@@ -76,9 +76,9 @@ class DealController extends Controller
     private function offerData(Request $request): array
     { return $request->validate(['total_amount'=>['required','numeric','min:0.01'],'down_payment'=>['nullable','numeric','min:0'],'installments'=>['required','integer','min:1','max:120'],'monthly_interest'=>['nullable','numeric','min:0','max:20']]); }
 
-    private function createDealWithOffer(int $sellerId,int $buyerId,array $data,string $origin,?int $listingId,int $createdBy): Deal
+    private function createDealWithOffer(int $sellerId,int $buyerId,array $data,string $origin,?int $listingId,int $createdBy,?string $title=null,?string $description=null): Deal
     {
-        $deal = Deal::create(['seller_id'=>$sellerId,'buyer_id'=>$buyerId,'listing_id'=>$listingId,'origin'=>$origin,'status'=>'proposal_sent','total_amount'=>$data['total_amount'],'down_payment'=>$data['down_payment']??0,'installments'=>$data['installments'],'monthly_interest'=>$data['monthly_interest']??0]);
+        $deal = Deal::create(['seller_id'=>$sellerId,'buyer_id'=>$buyerId,'listing_id'=>$listingId,'origin'=>$origin,'title'=>$title,'description'=>$description,'status'=>'proposal_sent','total_amount'=>$data['total_amount'],'down_payment'=>$data['down_payment']??0,'installments'=>$data['installments'],'monthly_interest'=>$data['monthly_interest']??0]);
         DealOffer::create(['deal_id'=>$deal->id,'created_by'=>$createdBy,'type'=>'proposal','total_amount'=>$deal->total_amount,'down_payment'=>$deal->down_payment,'installments'=>$deal->installments,'monthly_interest'=>$deal->monthly_interest,'status'=>'pending']);
         return $deal;
     }
