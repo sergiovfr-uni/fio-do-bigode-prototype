@@ -41,10 +41,21 @@ return new class extends Migration {
             $t->timestamp('expires_at')->nullable();
             $t->timestamps();
         });
+
+        Schema::create('account_deletion_requests', function (Blueprint $t) {
+            $t->id();
+            $t->foreignId('user_id')->constrained('users');
+            $t->string('status', 20)->default('pending');
+            $t->string('reason', 500)->nullable();
+            $t->timestamp('requested_at');
+            $t->timestamp('processed_at')->nullable();
+            $t->timestamps();
+        });
     }
 
     public function down(): void
     {
+        Schema::dropIfExists('account_deletion_requests');
         Schema::dropIfExists('deal_invitations');
         Schema::table('deals', function (Blueprint $t) { $t->dropColumn(['title','description']); });
         Schema::table('users', function (Blueprint $t) { $t->dropColumn(['account_status','deletion_requested_at']); });
