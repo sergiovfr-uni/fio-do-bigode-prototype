@@ -52,4 +52,34 @@ class ComplianceController extends Controller
 
         return response()->json(['kyc_status'=>$request->user()->fresh()->kyc_status,'risk_score'=>$request->user()->fresh()->risk_score]);
     }
+
+    public function requestAccountDeletion(Request $request)
+    {
+        $data = $request->validate([
+            'reason' => ['nullable','string','max:500'],
+        ]);
+
+        $existing = DB::table('account_deletion_requests')
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'pending')
+            ->first();
+
+        if (!$existing) {
+            DB::table('account_deletion_requests')->insert([
+                'user_id'=>$request->user()->id,
+                'status'=>'pending',
+                'reason'=>$data['reason']??null,
+                'requested_at'=>now(),
+                'created_at'=>now(),
+                'updated_at'=>now(),
+            ]);
+        }
+
+        $request->user()->tokens()->delete();
+
+        return response()->json([
+            'status'=>'pending',
+            'message'=>'Solicitação de exclusão registrada. A conta será bloqueada para nova autenticação quando o fluxo definitivo de exclusão/anônimização for ativado.',
+        ], 202);
+    }
 }
