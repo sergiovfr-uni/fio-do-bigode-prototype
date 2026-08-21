@@ -10,6 +10,7 @@ use App\Services\DealEventService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 class DealInvitationController extends Controller
@@ -120,7 +121,10 @@ class DealInvitationController extends Controller
         }
 
         $invite = DB::table('deal_invitations')->where('code', $code)->first();
-        return response()->json($this->inviteResponse($invite, false), 201);
+
+$this->sendInvitationEmail($invite, $user);
+
+return response()->json($this->inviteResponse($invite, false), 201);
     }
 
     public function accept(Request $request, string $code, DealEventService $events)
@@ -155,7 +159,108 @@ class DealInvitationController extends Controller
 
         return response()->json($deal->load(['seller:id,name,reputation_score','buyer:id,name,reputation_score','offers']), 201);
     }
+private function sendInvitationEmail(object $invite, User $creator): void
+{
+    if (!$invite->invitee_email || !env('RESEND_API_KEY')) {
+        return;
+    }
 
+    $inviteUrl = 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html?invite='.$invite->code;
+
+    $name = htmlspecialchars(
+        (string) ($invite->invitee_name ?: 'Olá'),
+        ENT_QUOTES,
+        'UTF-8'
+    );
+
+    $creatorName = htmlspecialchars(
+        (string) $creator->name,
+        ENT_QUOTES,
+        'UTF-8'
+    );
+
+    $title = htmlspecialchars(
+        (string) $invite->title,
+        ENT_QUOTES,
+        'UTF-8'
+    );
+
+    $description = htmlspecialchars(
+        (string) $invite->description,
+        ENT_QUOTES,
+        'UTF-8'
+    );
+
+    $amount = 'R$ '.number_format(
+        (float) $invite->total_amount,
+        2,
+        ',',
+        '.'
+    );
+
+    $downPayment = 'R$ '.number_format(
+        (float) $invite->down_payment,
+        2,
+        ',',
+        '.'
+    );
+
+    try {
+        Http::withToken(env('RESEND_API_KEY'))
+            ->acceptJson()
+            ->post('https://api.resend.com/emails', [
+                'from' => 'Fio do Bigode <naoresponda@nofiodobigode.app.br>',
+                'to' => [$invite->invitee_email],
+                'subject' => $creator->name.' convidou você para uma negociação',
+                'html' => "
+                    <div style='font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#111'>
+                        <div style='background:#111;padding:30px;text-align:center;color:#d3a42f'>
+                            <h1 style='margin:0'>FIO DO BIGODE</h1>
+                        </div>
+
+                        <div style='padding:30px'>
+                            <h2>{$name}, você recebeu um convite.</h2>
+
+                            <p>
+                                <strong>{$creatorName}</strong>
+                                convidou você para participar de uma negociação no Fio do Bigode.
+                            </p>
+
+                            <div style='border:1px solid #ddd;border-radius:14px;padding:20px;margin:25px 0'>
+                                <strong>{$title}</strong>
+
+                                <p>{$description}</p>
+
+                                <p><strong>Valor:</strong> {$amount}</p>
+                                <p><strong>Entrada:</strong> {$downPayment}</p>
+                                <p><strong>Parcelas:</strong> {$invite->installments}</p>
+                                <p><strong>Juros/mês:</strong> {$invite->monthly_interest}%</p>
+                                <p><strong>Código:</strong> {$invite->code}</p>
+                            </div>
+
+                            <a
+                                href='{$inviteUrl}'
+                                style='display:block;background:#111;color:#fff;text-decoration:none;
+                                padding:16px;border-radius:12px;text-align:center;font-weight:bold'
+                            >
+                                Ver negociação
+                            </a>
+
+                            <p style='font-size:12px;color:#777;margin-top:25px'>
+                                Este convite expira em 7 dias.
+                                Antes de participar da negociação, será necessário concluir
+                                seu cadastro e validação de identidade.
+                            </p>
+                        </div>
+                    </div>
+                ",
+            ])
+            ->throw();
+
+    } catch (\Throwable $e) {
+        report($e);
+    }
+}
     private function inviteResponse(object $invite, bool $reused): array
     {
         return [
