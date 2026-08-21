@@ -4,7 +4,7 @@
 Vincular quantidade de anúncios ativos do classificado ao plano de assinatura do usuário, mantendo limites parametrizáveis no backend.
 
 ## GET /v1/plans
-Retorna planos, preço, trial_days, active_ads_limit, negotiations_limit e featured_ads.
+Retorna planos, preço, trial_days, active_ads_limit, negotiations_limit e featured_ads, sponsored_ads_included e sponsored_extra_price.
 
 ## GET /v1/classifieds
 Lista anúncios ativos e públicos. Filtros: category, city, price_min, price_max, featured, owner_id.
@@ -35,6 +35,19 @@ Exemplo:
   "featured_ads_used":0
 }
 ```
+
+## Patrocínio e destaque na Home
+
+### POST /v1/classifieds/{id}/sponsor
+Ativa o destaque patrocinado do anúncio. Validar propriedade do anúncio, status ativo, cota incluída no plano ou cobrança adicional autorizada. Campos: `placement` (`home_featured`), `starts_at`, `ends_at` e `billing_source`.
+
+### DELETE /v1/classifieds/{id}/sponsor
+Encerra o destaque sem desativar o anúncio comum.
+
+`GET /v1/listings` deve retornar `sponsored`, `sponsored_until` e mídia principal. Na Home, anúncios patrocinados ativos aparecem antes dos recentes orgânicos, sempre identificados com o selo **Patrocinado**.
+
+## Mídia
+Cada anúncio terá `cover_image` obrigatória e `media[]` opcional. O backend deve armazenar imagens em storage dedicado, gerar miniaturas, validar MIME/tamanho, remover metadados sensíveis e nunca depender de Base64 no banco em produção.
 
 ## Admin
 Planos e limites devem ser editáveis no Admin sem necessidade de nova publicação do app. Registrar alterações de plano e limites em auditoria.
