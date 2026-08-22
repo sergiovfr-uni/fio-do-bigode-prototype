@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -54,14 +55,23 @@ class AuthController extends Controller
         abort_unless(($user->account_status ?? 'active') === 'active', 403, 'Esta conta está bloqueada ou em processo de exclusão.');
         $this->ensureFreeTrial($user);
 
-        $user->tokens()->where('name', 'mobile')->delete();
+        $challengeId = (string) Str::uuid();
+        $code = (string) random_int(100000, 999999);
+        Cache::put('2fa:'.$challengeId, [
+            'user_id'=>$user->id,
+            'code'=>$code,
+            'attempts'=>0,
+        ], now()->addMinutes(5));
+
+        $this->sendTwoFactorCode($user, $code);
 
         return response()->json([
-            'token'=>$user->createToken('mobile')->plainTextToken,
-            'token_type'=>'Bearer',
-            'user'=>$user,
-            'next'=>$user->kyc_status === 'verified' ? 'authenticated' : 'kyc',
-            'two_factor_required'=>false,
+            'two_factor_required'=>true,
+            'challenge_id'=>$challengeId,
+            'delivery'=>'email',
+            'masked_email'=>$this->maskEmail($user->email),
+            'expires_in'=>300,
+            'message'=>'Enviamos um código de 6 dígitos para seu e-mail.',
         ]);
     }
 
@@ -138,6 +148,21 @@ class AuthController extends Controller
     {
         $request->user()->currentAccessToken()?->delete();
         return response()->noContent();
+    }
+
+    private function sendTwoFactorCode(User $user, string $code): void
+    {
+        abort_unless(env('RESEND_API_KEY'), 503, 'Envio do código de acesso temporariamente indisponível.');
+
+        Http::withToken(env('RESEND_API_KEY'))
+            ->acceptJson()
+            ->post('https://api.resend.com/emails', [
+                'from'=>'Fio do Bigode <naoresponda@nofiodobigode.app.br>',
+                'to'=>[$user->email],
+                'subject'=>'Seu código de acesso ao Fio do Bigode',
+                'html'=>"<div style='font-family:Arial,sans-serif;max-width:560px;margin:auto'><h2>Confirme seu acesso</h2><p>Use o código abaixo para entrar:</p><div style='font-size:32px;font-weight:bold;letter-spacing:8px;padding:20px;background:#f5f2ea;text-align:center'>{$code}</div><p>O código expira em 5 minutos e só pode ser usado uma vez.</p><p style='font-size:12px;color:#777'>Se você não tentou entrar, ignore esta mensagem.</p></div>",
+            ])
+            ->throw();
     }
 
     private function ensureFreeTrial(User $user): void

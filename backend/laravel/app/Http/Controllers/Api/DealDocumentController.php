@@ -35,4 +35,35 @@ class DealDocumentController extends Controller
         if (($data['type']==='signed_contract') && ($data['signed']??false)) $deal->update(['status'=>'active']);
         return response()->json(DB::table('deal_documents')->find($id),201);
     }
+    public function storeSignedBase64(Request $request, Deal $deal)
+    {
+        abort_unless(in_array($request->user()->id,[$deal->seller_id,$deal->buyer_id],true),403);
+        abort_unless(in_array($deal->status,['accepted','signature_pending'],true),422,'Gere os documentos antes de importar a versão assinada.');
+
+        $data=$request->validate([
+            'file_name'=>['required','string','max:255'],
+            'file_base64'=>['required','string'],
+            'signature_provider'=>['required','in:gov.br-external'],
+            'signed_by_both'=>['accepted'],
+        ]);
+
+        $encoded=preg_replace('/^data:application\/pdf;base64,/', '', $data['file_base64']);
+        $binary=base64_decode($encoded, true);
+        abort_unless($binary !== false && str_starts_with($binary, '%PDF-'),422,'PDF inválido.');
+        abort_if(strlen($binary) > 10 * 1024 * 1024,422,'O PDF deve ter no máximo 10 MB.');
+
+        $sha256=hash('sha256',$binary);
+        $path='deals/'.$deal->public_id.'/'.$sha256.'.pdf';
+        Storage::disk('local')->put($path,$binary);
+
+        $id=DB::table('deal_documents')->insertGetId([
+            'deal_id'=>$deal->id,'uploaded_by'=>$request->user()->id,'type'=>'signed_contract','storage_path'=>$path,
+            'original_name'=>basename($data['file_name']),'mime_type'=>'application/pdf','sha256'=>$sha256,
+            'signed'=>true,'created_at'=>now(),'updated_at'=>now(),
+        ]);
+
+        $deal->update(['status'=>'active']);
+        return response()->json(DB::table('deal_documents')->find($id),201);
+    }
+
 }
