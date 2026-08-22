@@ -61,6 +61,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/deals/{deal}/reject', [DealController::class, 'reject']);
         Route::get('/deals/{deal}/witnesses', [DealWitnessController::class, 'index']);
         Route::post('/deals/{deal}/witnesses', [DealWitnessController::class, 'store']);
+        Route::post('/deals/{deal}/witnesses/skip', [DealWitnessController::class, 'skip']);
         Route::post('/deals/{deal}/contract', [ContractController::class, 'generate']);
         Route::post('/deals/{deal}/generate-documents', [ContractController::class, 'generate']);
         Route::get('/deals/{deal}/contract/download', [ContractController::class, 'download']);

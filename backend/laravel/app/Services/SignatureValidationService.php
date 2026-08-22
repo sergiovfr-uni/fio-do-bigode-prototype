@@ -50,14 +50,17 @@ class SignatureValidationService
             ->unique()
             ->values();
 
+        $requiredCount = $deal->witnesses->count() === 2 ? 4 : 2;
         $valid = ($response['valid'] ?? false) === true
             && ($response['document_intact'] ?? false) === true
-            && $required->count() === 4
+            && $required->count() === $requiredCount
             && $required->every(fn($identifier) => $signatures->contains($identifier));
 
         return [
             'status'=>$valid ? 'valid' : 'rejected',
-            'reason'=>$valid ? null : 'O PDF precisa estar íntegro e conter quatro assinaturas válidas: comprador, vendedor e duas testemunhas.',
+            'reason'=>$valid ? null : ($requiredCount === 4
+                ? 'O PDF precisa estar íntegro e conter quatro assinaturas válidas: comprador, vendedor e duas testemunhas.'
+                : 'O PDF precisa estar íntegro e conter as assinaturas válidas do comprador e do vendedor.'),
             'signers'=>$signatures->all(),
             'report'=>$response,
         ];

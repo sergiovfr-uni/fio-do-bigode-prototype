@@ -65,6 +65,27 @@ class DealWitnessController extends Controller
         return response()->json($deal->fresh(['offers', 'witnesses']));
     }
 
+    public function skip(Request $request, Deal $deal, ContractService $contracts, DealEventService $events)
+    {
+        $this->authorizeParty($request, $deal);
+        abort_unless($deal->status === 'witnesses_pending', 422, 'Esta escolha só pode ser feita após o aceite e antes da geração do dossiê.');
+        abort_if($deal->witnesses()->exists(), 422, 'Já existem testemunhas cadastradas nesta negociação.');
+
+        $generated = DB::transaction(function () use ($request, $deal, $contracts) {
+            $generated = $contracts->generate($deal->fresh(), $request->user()->id);
+            $deal->update(['status' => 'signature_pending']);
+            return $generated;
+        });
+
+        $events->record($deal, $request->user()->id, 'witnesses_waived', [
+            'basis' => 'CPC art. 784, § 4º',
+        ]);
+        $events->record($deal, $request->user()->id, 'documents_generated', ['sha256' => $generated['sha256']]);
+        $events->notify($deal, $events->otherParty($deal, $request->user()->id), 'documents_generated', 'Dossiê pronto para assinatura', 'O dossiê sem testemunhas foi gerado e está disponível para assinatura das partes.',['deal_id'=>$deal->id]);
+
+        return response()->json($deal->fresh(['offers', 'witnesses']));
+    }
+
     private function authorizeParty(Request $request, Deal $deal): void
     {
         abort_unless(in_array($request->user()->id, [$deal->seller_id, $deal->buyer_id], true), 403);

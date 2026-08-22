@@ -85,7 +85,7 @@ class DealDocumentController extends Controller
             'document'=>DB::table('deal_documents')->find($id),
             'validation_status'=>$result['status'],
             'message'=>match($result['status']){
-                'valid'=>'As quatro assinaturas foram validadas. Negociação ativada.',
+                'valid'=>'Todas as assinaturas exigidas foram validadas. Negociação ativada.',
                 'rejected'=>$result['reason'],
                 default=>'Documento recebido em quarentena e aguardando validação criptográfica.',
             },
