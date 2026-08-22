@@ -8,6 +8,8 @@ use App\Services\ContractService;
 use App\Services\DealEventService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 class DealWitnessController extends Controller
 {
@@ -18,7 +20,10 @@ class DealWitnessController extends Controller
             'id' => $witness->id,
             'name' => $witness->name,
             'email' => $witness->email,
-            'cpf_masked' => '***.***.***-'.substr($witness->getRawOriginal('cpf'), -2),
+            'cpf_masked' => $witness->cpf_masked,
+            'invitation_code' => $witness->invitation_code,
+            'invitation_status' => $witness->invitation_status,
+            'invite_url' => $witness->invite_url,
         ]));
     }
 
@@ -51,7 +56,12 @@ class DealWitnessController extends Controller
 
         $generated = DB::transaction(function () use ($request, $deal, $witnesses, $contracts) {
             foreach ($witnesses as $witness) {
-                $deal->witnesses()->create($witness + ['registered_by' => $request->user()->id]);
+                $deal->witnesses()->create($witness + [
+                    'registered_by' => $request->user()->id,
+                    'invitation_code' => $this->newCode(),
+                    'invitation_status' => 'pending',
+                    'invitation_expires_at' => now()->addDays(30),
+                ]);
             }
             $generated = $contracts->generate($deal->fresh(), $request->user()->id);
             $deal->update(['status' => 'signature_pending']);
@@ -61,6 +71,9 @@ class DealWitnessController extends Controller
         $events->record($deal, $request->user()->id, 'witnesses_registered', ['count' => 2]);
         $events->record($deal, $request->user()->id, 'documents_generated', ['sha256' => $generated['sha256']]);
         $events->notify($deal, $events->otherParty($deal, $request->user()->id), 'documents_generated', 'Dossiê pronto para assinatura', 'As duas testemunhas foram definidas e o dossiê da negociação está disponível.',['deal_id'=>$deal->id]);
+
+        $deal->fresh(['seller:id,name', 'buyer:id,name', 'witnesses'])->witnesses
+            ->each(fn ($witness) => $this->sendInvitationEmail($witness, $deal));
 
         return response()->json($deal->fresh(['offers', 'witnesses']));
     }
@@ -89,5 +102,41 @@ class DealWitnessController extends Controller
     private function authorizeParty(Request $request, Deal $deal): void
     {
         abort_unless(in_array($request->user()->id, [$deal->seller_id, $deal->buyer_id], true), 403);
+    }
+
+    private function newCode(): string
+    {
+        do {
+            $code = Str::upper(Str::random(10));
+        } while (DB::table('deal_witnesses')->where('invitation_code', $code)->exists());
+        return $code;
+    }
+
+    private function sendInvitationEmail($witness, Deal $deal): void
+    {
+        if (!$witness->email || !env('RESEND_API_KEY')) return;
+
+        $name = htmlspecialchars($witness->name, ENT_QUOTES, 'UTF-8');
+        $title = htmlspecialchars($deal->title ?? $deal->listing?->title ?? 'Negociação', ENT_QUOTES, 'UTF-8');
+        $dealCode = strtoupper(substr(str_replace('-', '', $deal->public_id), 0, 8));
+        $inviteUrl = $witness->invite_url;
+
+        try {
+            Http::withToken(env('RESEND_API_KEY'))->acceptJson()->post('https://api.resend.com/emails', [
+                'from' => 'Fio do Bigode <naoresponda@nofiodobigode.app.br>',
+                'to' => [$witness->email],
+                'subject' => 'Convite para testemunhar uma negociação',
+                'html' => "<div style='font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#111'>
+                    <div style='background:#111;padding:28px;text-align:center;color:#d3a42f'><h1>FIO DO BIGODE</h1></div>
+                    <div style='padding:28px'><h2>{$name}, você foi indicado como testemunha.</h2>
+                    <p>Comprador e vendedor convidaram você para consultar o dossiê de <b>{$title}</b>.</p>
+                    <div style='border:1px solid #ddd;border-radius:14px;padding:18px;margin:22px 0'>
+                    <b>Código da negociação: {$dealCode}</b><br>Código do convite: {$witness->invitation_code}</div>
+                    <a href='{$inviteUrl}' style='display:block;background:#111;color:#fff;text-decoration:none;padding:16px;border-radius:12px;text-align:center;font-weight:bold'>Consultar dossiê</a>
+                    <p style='font-size:12px;color:#777'>O acesso é restrito a este documento e expira em 30 dias. A assinatura será realizada externamente via Gov.br ou certificado ICP-Brasil.</p></div></div>",
+            ])->throw();
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 }
