@@ -14,7 +14,7 @@ class ContractService
     {
         $deal->load(['seller', 'buyer', 'listing', 'offers', 'witnesses']);
         abort_unless(in_array($deal->status, ['witnesses_pending', 'signature_pending'], true), 422, 'A proposta precisa estar aceita antes da geração do dossiê.');
-        abort_unless($deal->witnesses->count() === 2, 422, 'Cadastre exatamente duas testemunhas antes de gerar o dossiê.');
+        abort_unless(in_array($deal->witnesses->count(), [0, 2], true), 422, 'O dossiê deve ser gerado sem testemunhas ou com exatamente duas testemunhas.');
 
         $html = $this->render($deal);
         $options = new Options();
@@ -46,6 +46,16 @@ class ContractService
         $cpf = fn ($value) => preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', preg_replace('/\D+/', '', (string) $value));
         $item = $deal->listing?->title ?? $deal->title ?? 'Bem ou serviço descrito na negociação';
         $witnesses = $deal->witnesses->values();
+        $withWitnesses = $witnesses->count() === 2;
+        $signatureRequirement = $withWitnesses
+            ? 'comprador, vendedor e pelas duas testemunhas identificadas abaixo'
+            : 'comprador e vendedor';
+        $witnessNotice = $withWitnesses
+            ? ''
+            : '<p><b>Opção sem testemunhas:</b> as partes optaram pela formalização eletrônica sem testemunhas. A dispensa prevista no art. 784, § 4º, do Código de Processo Civil depende de a integridade do título eletrônico ser conferida por provedor de assinatura.</p>';
+        $witnessSignatures = $withWitnesses
+            ? '<div class="signature">'.$e($witnesses[0]->name).'<br>CPF '.$e($cpf($witnesses[0]->getRawOriginal('cpf'))).'<br>TESTEMUNHA 1</div><div class="signature">'.$e($witnesses[1]->name).'<br>CPF '.$e($cpf($witnesses[1]->getRawOriginal('cpf'))).'<br>TESTEMUNHA 2</div>'
+            : '';
         $schedule = $installments->map(fn ($row) => '<tr><td>'.$row->number.'</td><td>'.date('d/m/Y', strtotime($row->due_date)).'</td><td>'.$money($row->amount).'</td></tr>')->implode('');
         $notes = $installments->map(function ($row) use ($deal, $e, $money) {
             return '<div class="page-break"></div><h1>NOTA PROMISSÓRIA Nº '.$row->number.'/'.$deal->installments.'</h1><p>Vencimento: <b>'.date('d/m/Y', strtotime($row->due_date)).'</b></p><p>Valor: <b>'.$money($row->amount).'</b></p><p>Ao vencimento, o COMPRADOR/DEVEDOR pagará ao VENDEDOR/CREDOR o valor acima, referente à negociação '.$e($deal->public_id).', observadas as condições do Acordo e da Confissão de Dívida integrantes deste mesmo dossiê.</p>';
@@ -61,9 +71,9 @@ class ContractService
         <h2>1. Objeto e valor</h2><p>As partes ajustam a negociação de <b>'.$e($item).'</b>, pelo valor total de <b>'.$money($deal->total_amount).'</b>, com entrada de <b>'.$money($deal->down_payment).'</b> e saldo em '.$deal->installments.' parcela(s), à taxa de '.$e(number_format((float) $deal->monthly_interest, 2, ',', '.')).'% ao mês.</p>
         <h2>2. Confissão de dívida</h2><p>O COMPRADOR/DEVEDOR reconhece como líquida, certa e exigível a obrigação decorrente desta negociação, comprometendo-se a pagar os valores nos vencimentos abaixo.</p>
         <table><thead><tr><th>Parcela</th><th>Vencimento</th><th>Valor</th></tr></thead><tbody>'.$schedule.'</tbody></table>
-        <h2>3. Documentos e assinatura</h2><p>Este dossiê reúne o acordo, a confissão de dívida e as notas promissórias. O arquivo final deverá ser assinado digitalmente pelo comprador, vendedor e pelas duas testemunhas. A plataforma somente ativará a negociação após validação criptográfica da integridade do PDF e das quatro identidades.</p>
+        <h2>3. Documentos e assinatura</h2><p>Este dossiê reúne o acordo, a confissão de dívida e as notas promissórias. O arquivo final deverá ser assinado digitalmente por '.$signatureRequirement.'. A plataforma somente ativará a negociação após validação criptográfica da integridade do PDF e das identidades exigidas neste dossiê.</p>'.$witnessNotice.'
         <h2>4. Papel da plataforma</h2><p>O Fio do Bigode atua como ferramenta tecnológica de registro, organização e acompanhamento, não garantindo solvência, pagamento, propriedade, estado do bem ou adimplemento. As partes são responsáveis pelas informações e devem revisar o conteúdo antes da assinatura.</p>
-        <div class="signatures"><div class="signature">'.$e($deal->seller->name).'<br>CPF '.$e($cpf($deal->seller->cpf)).'<br>VENDEDOR/CREDOR</div><div class="signature">'.$e($deal->buyer->name).'<br>CPF '.$e($cpf($deal->buyer->cpf)).'<br>COMPRADOR/DEVEDOR</div><div class="signature">'.$e($witnesses[0]->name).'<br>CPF '.$e($cpf($witnesses[0]->getRawOriginal('cpf'))).'<br>TESTEMUNHA 1</div><div class="signature">'.$e($witnesses[1]->name).'<br>CPF '.$e($cpf($witnesses[1]->getRawOriginal('cpf'))).'<br>TESTEMUNHA 2</div></div>
+        <div class="signatures"><div class="signature">'.$e($deal->seller->name).'<br>CPF '.$e($cpf($deal->seller->cpf)).'<br>VENDEDOR/CREDOR</div><div class="signature">'.$e($deal->buyer->name).'<br>CPF '.$e($cpf($deal->buyer->cpf)).'<br>COMPRADOR/DEVEDOR</div>'.$witnessSignatures.'</div>
         <p class="small">Gerado em '.now()->format('d/m/Y H:i:s').'.</p>'.$notes.'</body></html>';
     }
 }
