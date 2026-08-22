@@ -7,6 +7,7 @@ use App\Models\Deal;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use App\Services\SignatureValidationService;
 
 class DealDocumentController extends Controller
 {
@@ -35,16 +36,15 @@ class DealDocumentController extends Controller
         if (($data['type']==='signed_contract') && ($data['signed']??false)) $deal->update(['status'=>'active']);
         return response()->json(DB::table('deal_documents')->find($id),201);
     }
-    public function storeSignedBase64(Request $request, Deal $deal)
+    public function storeSignedBase64(Request $request, Deal $deal, SignatureValidationService $validator)
     {
         abort_unless(in_array($request->user()->id,[$deal->seller_id,$deal->buyer_id],true),403);
-        abort_unless(in_array($deal->status,['accepted','signature_pending'],true),422,'Gere os documentos antes de importar a versão assinada.');
+        abort_unless(in_array($deal->status,['accepted','signature_pending','signature_validation_pending','signature_validation_rejected'],true),422,'Gere os documentos antes de importar a versão assinada.');
 
         $data=$request->validate([
             'file_name'=>['required','string','max:255'],
             'file_base64'=>['required','string'],
-            'signature_provider'=>['required','in:gov.br-external'],
-            'signed_by_both'=>['accepted'],
+            'signature_provider'=>['required','in:gov.br-external,icp-brasil-external'],
         ]);
 
         $encoded=preg_replace('/^data:application\/pdf;base64,/', '', $data['file_base64']);
@@ -53,17 +53,43 @@ class DealDocumentController extends Controller
         abort_if(strlen($binary) > 10 * 1024 * 1024,422,'O PDF deve ter no máximo 10 MB.');
 
         $sha256=hash('sha256',$binary);
-        $path='deals/'.$deal->public_id.'/'.$sha256.'.pdf';
+        $path='deals/'.$deal->public_id.'/quarantine/'.$sha256.'.pdf';
         Storage::disk('local')->put($path,$binary);
 
         $id=DB::table('deal_documents')->insertGetId([
             'deal_id'=>$deal->id,'uploaded_by'=>$request->user()->id,'type'=>'signed_contract','storage_path'=>$path,
             'original_name'=>basename($data['file_name']),'mime_type'=>'application/pdf','sha256'=>$sha256,
-            'signed'=>true,'created_at'=>now(),'updated_at'=>now(),
+            'signed'=>false,'validation_status'=>'pending','signature_provider'=>$data['signature_provider'],
+            'created_at'=>now(),'updated_at'=>now(),
         ]);
 
-        $deal->update(['status'=>'active']);
-        return response()->json(DB::table('deal_documents')->find($id),201);
+        $deal->update(['status'=>'signature_validation_pending']);
+        $result=$validator->validate($binary,$deal);
+
+        DB::table('deal_documents')->where('id',$id)->update([
+            'signed'=>$result['status']==='valid',
+            'validation_status'=>$result['status'],
+            'signer_identifiers'=>json_encode($result['signers'],JSON_UNESCAPED_UNICODE),
+            'validation_report'=>$result['report'] ? json_encode($result['report'],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) : null,
+            'validated_at'=>$result['status']==='pending' ? null : now(),
+            'updated_at'=>now(),
+        ]);
+
+        $deal->update(['status'=>match($result['status']){
+            'valid'=>'active',
+            'rejected'=>'signature_validation_rejected',
+            default=>'signature_validation_pending',
+        }]);
+
+        return response()->json([
+            'document'=>DB::table('deal_documents')->find($id),
+            'validation_status'=>$result['status'],
+            'message'=>match($result['status']){
+                'valid'=>'As duas assinaturas foram validadas. Negociação ativada.',
+                'rejected'=>$result['reason'],
+                default=>'Documento recebido em quarentena e aguardando validação criptográfica.',
+            },
+        ],202);
     }
 
 }
