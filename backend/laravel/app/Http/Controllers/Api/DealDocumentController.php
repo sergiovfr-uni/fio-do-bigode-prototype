@@ -39,7 +39,7 @@ class DealDocumentController extends Controller
     public function storeSignedBase64(Request $request, Deal $deal, SignatureValidationService $validator)
     {
         abort_unless(in_array($request->user()->id,[$deal->seller_id,$deal->buyer_id],true),403);
-        abort_unless(in_array($deal->status,['accepted','signature_pending','signature_validation_pending','signature_validation_rejected'],true),422,'Gere os documentos antes de importar a versão assinada.');
+        abort_unless(in_array($deal->status,['signature_pending','signature_validation_pending','signature_validation_rejected'],true),422,'Cadastre as testemunhas e gere o dossiê antes de importar a versão assinada.');
 
         $data=$request->validate([
             'file_name'=>['required','string','max:255'],
@@ -85,7 +85,7 @@ class DealDocumentController extends Controller
             'document'=>DB::table('deal_documents')->find($id),
             'validation_status'=>$result['status'],
             'message'=>match($result['status']){
-                'valid'=>'As duas assinaturas foram validadas. Negociação ativada.',
+                'valid'=>'As quatro assinaturas foram validadas. Negociação ativada.',
                 'rejected'=>$result['reason'],
                 default=>'Documento recebido em quarentena e aguardando validação criptográfica.',
             },

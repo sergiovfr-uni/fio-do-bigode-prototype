@@ -42,8 +42,9 @@ class SignatureValidationService
             ->unique()
             ->values();
 
-        $deal->loadMissing(['seller:id,cpf','buyer:id,cpf']);
+        $deal->loadMissing(['seller:id,cpf','buyer:id,cpf','witnesses:id,deal_id,cpf']);
         $required = collect([$deal->seller?->cpf, $deal->buyer?->cpf])
+            ->concat($deal->witnesses->map(fn($witness) => $witness->getRawOriginal('cpf')))
             ->map(fn($identifier) => preg_replace('/\D+/', '', (string)$identifier))
             ->filter()
             ->unique()
@@ -51,12 +52,12 @@ class SignatureValidationService
 
         $valid = ($response['valid'] ?? false) === true
             && ($response['document_intact'] ?? false) === true
-            && $required->count() === 2
+            && $required->count() === 4
             && $required->every(fn($identifier) => $signatures->contains($identifier));
 
         return [
             'status'=>$valid ? 'valid' : 'rejected',
-            'reason'=>$valid ? null : 'As duas assinaturas válidas não correspondem aos CPFs das partes.',
+            'reason'=>$valid ? null : 'O PDF precisa estar íntegro e conter quatro assinaturas válidas: comprador, vendedor e duas testemunhas.',
             'signers'=>$signatures->all(),
             'report'=>$response,
         ];
