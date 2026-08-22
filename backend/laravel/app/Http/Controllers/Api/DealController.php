@@ -9,6 +9,7 @@ use App\Models\Listing;
 use App\Models\User;
 use App\Services\DealEventService;
 use App\Services\InstallmentService;
+use App\Services\ContractService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -65,7 +66,7 @@ class DealController extends Controller
         return response()->json($offer, 201);
     }
 
-    public function accept(Request $request, Deal $deal, InstallmentService $installments, DealEventService $events)
+    public function accept(Request $request, Deal $deal, InstallmentService $installments, DealEventService $events, ContractService $contracts)
     {
         $user=$request->user();
         abort_unless(in_array($user->id, [$deal->seller_id,$deal->buyer_id], true), 403);
@@ -77,9 +78,12 @@ class DealController extends Controller
             $deal->update(['total_amount'=>$offer->total_amount,'down_payment'=>$offer->down_payment,'installments'=>$offer->installments,'monthly_interest'=>$offer->monthly_interest,'status'=>'accepted','terms_locked_at'=>now()]);
             $installments->generate($deal->fresh());
         });
+        $generated=$contracts->generate($deal->fresh());
+        $deal->update(['status'=>'signature_pending']);
         $events->record($deal,$user->id,'terms_accepted',['offer_id'=>$offer->id]);
-        $events->notify($deal,$events->otherParty($deal,$user->id),'terms_accepted','Condições aceitas',$user->name.' aceitou as condições. O acordo está pronto para formalização.',['deal_id'=>$deal->id]);
-        return response()->json($deal->fresh(['offers','installments']));
+        $events->record($deal,$user->id,'documents_generated',['sha256'=>$generated['sha256']]);
+        $events->notify($deal,$events->otherParty($deal,$user->id),'terms_accepted','Condições aceitas e documentos gerados',$user->name.' aceitou as condições. Os documentos estão disponíveis para assinatura.',['deal_id'=>$deal->id]);
+        return response()->json($deal->fresh(['offers']));
     }
 
     public function reject(Request $request, Deal $deal, DealEventService $events)
