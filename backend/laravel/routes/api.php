@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\InstallmentController;
 use App\Http\Controllers\Api\ListingController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\WalletController;
+use App\Http\Controllers\Api\WitnessInvitationController;
 
 Route::get('/health', function () {
     try {
@@ -37,6 +38,8 @@ Route::prefix('v1')->group(function () {
     Route::post('/campaigns/{campaign}/click', [CampaignController::class, 'click']);
     Route::get('/listings', [ListingController::class, 'index']);
     Route::get('/listings/{listing}', [ListingController::class, 'show']);
+    Route::get('/witness-invitations/{code}', [WitnessInvitationController::class, 'show']);
+    Route::get('/witness-invitations/{code}/document', [WitnessInvitationController::class, 'download']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
