@@ -31,10 +31,11 @@ class DealWitnessController extends Controller
     {
         $this->authorizeParty($request, $deal);
         abort_unless($deal->status === 'witnesses_pending', 422, 'As testemunhas só podem ser definidas após o aceite e antes da geração do dossiê.');
-        abort_if($deal->witnesses()->exists(), 422, 'As testemunhas desta negociação já foram definidas.');
+        $existing = $deal->witnesses()->get();
+        abort_if($existing->count() >= 2, 422, 'As duas testemunhas desta negociação já foram definidas.');
 
         $data = $request->validate([
-            'witnesses' => ['required', 'array', 'size:2'],
+            'witnesses' => ['required', 'array', 'min:1', 'max:2'],
             'witnesses.*.name' => ['required', 'string', 'min:3', 'max:160'],
             'witnesses.*.cpf' => ['required', 'string'],
             'witnesses.*.email' => ['required', 'email', 'max:255'],
@@ -47,33 +48,46 @@ class DealWitnessController extends Controller
             return $witness;
         });
 
-        abort_unless($witnesses->pluck('cpf')->unique()->count() === 2, 422, 'As duas testemunhas precisam ter CPFs diferentes.');
-        abort_unless($witnesses->pluck('email')->unique()->count() === 2, 422, 'As duas testemunhas precisam ter e-mails diferentes.');
+        abort_if($existing->count() + $witnesses->count() > 2, 422, 'A negociação aceita no máximo duas testemunhas.');
+        abort_unless($witnesses->pluck('cpf')->unique()->count() === $witnesses->count(), 422, 'As testemunhas precisam ter CPFs diferentes.');
+        abort_unless($witnesses->pluck('email')->unique()->count() === $witnesses->count(), 422, 'As testemunhas precisam ter e-mails diferentes.');
+        abort_if($witnesses->pluck('cpf')->intersect($existing->map(fn ($w) => $w->getRawOriginal('cpf')))->isNotEmpty(), 422, 'Esta testemunha já foi cadastrada.');
+        abort_if($witnesses->pluck('email')->intersect($existing->pluck('email'))->isNotEmpty(), 422, 'Este e-mail já pertence a uma testemunha cadastrada.');
 
         $deal->loadMissing(['seller:id,cpf', 'buyer:id,cpf']);
         $partyCpfs = collect([$deal->seller?->cpf, $deal->buyer?->cpf])->map(fn ($cpf) => preg_replace('/\D+/', '', (string) $cpf));
         abort_if($witnesses->pluck('cpf')->intersect($partyCpfs)->isNotEmpty(), 422, 'Comprador e vendedor não podem atuar como testemunhas da própria negociação.');
 
-        $generated = DB::transaction(function () use ($request, $deal, $witnesses, $contracts) {
+        $result = DB::transaction(function () use ($request, $deal, $witnesses, $contracts) {
+            $createdIds = [];
             foreach ($witnesses as $witness) {
-                $deal->witnesses()->create($witness + [
+                $created = $deal->witnesses()->create($witness + [
                     'registered_by' => $request->user()->id,
                     'invitation_code' => $this->newCode(),
                     'invitation_status' => 'pending',
                     'invitation_expires_at' => now()->addDays(30),
                 ]);
+                $createdIds[] = $created->id;
             }
-            $generated = $contracts->generate($deal->fresh(), $request->user()->id);
-            $deal->update(['status' => 'signature_pending']);
-            return $generated;
+            if ($deal->witnesses()->count() === 2) {
+                $generated = $contracts->generate($deal->fresh(), $request->user()->id);
+                $deal->update(['status' => 'signature_pending']);
+                return ['generated' => $generated, 'created_ids' => $createdIds];
+            }
+            return ['generated' => null, 'created_ids' => $createdIds];
         });
+        $generated = $result['generated'];
 
-        $events->record($deal, $request->user()->id, 'witnesses_registered', ['count' => 2]);
-        $events->record($deal, $request->user()->id, 'documents_generated', ['sha256' => $generated['sha256']]);
-        $events->notify($deal, $events->otherParty($deal, $request->user()->id), 'documents_generated', 'Dossiê pronto para assinatura', 'As duas testemunhas foram definidas e o dossiê da negociação está disponível.',['deal_id'=>$deal->id]);
+        $total = $deal->witnesses()->count();
+        $events->record($deal, $request->user()->id, 'witnesses_registered', ['added' => $witnesses->count(), 'total' => $total]);
+        $events->notify($deal, $events->otherParty($deal, $request->user()->id), 'witness_added', 'Testemunha adicionada', $request->user()->name.' adicionou testemunha(s) à negociação. Total: '.$total.'/2.',['deal_id'=>$deal->id,'witness_count'=>$total]);
+        if ($generated) {
+            $events->record($deal, $request->user()->id, 'documents_generated', ['sha256' => $generated['sha256']]);
+            $events->notify($deal, $events->otherParty($deal, $request->user()->id), 'documents_generated', 'Dossiê pronto para assinatura', 'As duas testemunhas foram definidas e o dossiê da negociação está disponível.',['deal_id'=>$deal->id]);
+        }
 
         $deal->fresh(['seller:id,name', 'buyer:id,name', 'witnesses'])->witnesses
-            ->each(fn ($witness) => $this->sendInvitationEmail($witness, $deal));
+            ->whereIn('id', $result['created_ids'])->each(fn ($witness) => $this->sendInvitationEmail($witness, $deal));
 
         return response()->json($deal->fresh(['offers', 'witnesses']));
     }

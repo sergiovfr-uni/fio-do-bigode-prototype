@@ -144,6 +144,23 @@ class AuthController extends Controller
         return response()->json($request->user());
     }
 
+    public function updateQualification(Request $request)
+    {
+        $data = $request->validate([
+            'identity_document'=>['required','string','max:40'], 'birth_date'=>['required','date','before:today'],
+            'marital_status'=>['required','string','max:40'], 'occupation'=>['required','string','max:120'],
+            'nationality'=>['required','string','max:60'], 'address_line'=>['required','string','max:220'],
+            'address_number'=>['required','string','max:30'], 'address_complement'=>['nullable','string','max:100'],
+            'district'=>['required','string','max:100'], 'city'=>['required','string','max:100'],
+            'state'=>['required','string','size:2'], 'postal_code'=>['required','string'],
+        ]);
+        $data['postal_code'] = preg_replace('/\D+/', '', $data['postal_code']);
+        abort_unless(strlen($data['postal_code']) === 8, 422, 'Informe um CEP válido.');
+        $data['state'] = strtoupper($data['state']);
+        $request->user()->update($data);
+        return response()->json($request->user()->fresh());
+    }
+
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()?->delete();

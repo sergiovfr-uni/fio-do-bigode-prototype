@@ -123,6 +123,17 @@ class DealInvitationController extends Controller
         $invite = DB::table('deal_invitations')->where('code', $code)->first();
 
 $this->sendInvitationEmail($invite, $user);
+$registeredInvitee = $invite->invitee_email
+    ? User::whereRaw('LOWER(email) = ?', [mb_strtolower($invite->invitee_email)])->first()
+    : null;
+if ($registeredInvitee && $registeredInvitee->id !== $user->id) {
+    DB::table('notifications')->insert([
+        'user_id'=>$registeredInvitee->id,'deal_id'=>null,'type'=>'deal_invitation_received',
+        'title'=>'Novo convite de negociação','message'=>$user->name.' relacionou você à negociação '.$invite->title.'.',
+        'data'=>json_encode(['invite_code'=>$invite->code,'invite_url'=>$this->inviteResponse($invite, false)['invite_url']], JSON_UNESCAPED_UNICODE),
+        'created_at'=>now(),'updated_at'=>now(),
+    ]);
+}
 
 return response()->json($this->inviteResponse($invite, false), 201);
     }

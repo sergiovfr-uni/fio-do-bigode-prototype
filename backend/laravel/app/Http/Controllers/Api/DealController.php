@@ -17,7 +17,7 @@ class DealController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        return Deal::query()->with(['listing','seller:id,name,kyc_status,reputation_score,risk_score','buyer:id,name,kyc_status,reputation_score,risk_score','offers','witnesses'])
+        return Deal::query()->with(['listing','seller:id,name,kyc_status,reputation_score,risk_score','buyer:id,name,kyc_status,reputation_score,risk_score','offers','witnesses','installments'])
             ->where(fn($q)=>$q->where('seller_id',$user->id)->orWhere('buyer_id',$user->id))->latest()->paginate(20);
     }
 
