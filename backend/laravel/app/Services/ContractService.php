@@ -15,6 +15,7 @@ class ContractService
         $deal->load(['seller', 'buyer', 'listing', 'offers', 'witnesses']);
         abort_unless(in_array($deal->status, ['witnesses_pending', 'signature_pending'], true), 422, 'A proposta precisa estar aceita antes da geração do dossiê.');
         abort_unless(in_array($deal->witnesses->count(), [0, 2], true), 422, 'O dossiê deve ser gerado sem testemunhas ou com exatamente duas testemunhas.');
+        abort_unless($deal->seller->hasContractQualification() && $deal->buyer->hasContractQualification(), 422, 'Comprador e vendedor precisam completar a qualificação contratual antes da geração do dossiê.');
 
         $html = $this->render($deal);
         $options = new Options();
@@ -44,6 +45,11 @@ class ContractService
         $e = fn ($value) => htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
         $money = fn ($value) => 'R$ '.number_format((float) $value, 2, ',', '.');
         $cpf = fn ($value) => preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', preg_replace('/\D+/', '', (string) $value));
+        $cep = fn ($value) => preg_replace('/(\d{5})(\d{3})/', '$1-$2', preg_replace('/\D+/', '', (string) $value));
+        $qualification = function ($party) use ($e, $cpf, $cep) {
+            $address = $party->address_line.', '.$party->address_number.($party->address_complement ? ', '.$party->address_complement : '').', '.$party->district.', '.$party->city.'/'.$party->state.', CEP '.$cep($party->postal_code);
+            return $e($party->name).', '.$e($party->nationality).', '.$e($party->marital_status).', '.$e($party->occupation).', documento de identidade '.$e($party->identity_document).', CPF '.$e($cpf($party->getRawOriginal('cpf'))).', residente e domiciliado(a) em '.$e($address).', e-mail '.$e($party->email).', telefone '.$e($party->phone);
+        };
         $item = $deal->listing?->title ?? $deal->title ?? 'Bem ou serviço descrito na negociação';
         $witnesses = $deal->witnesses->values();
         $withWitnesses = $witnesses->count() === 2;
@@ -66,8 +72,8 @@ class ContractService
         </style></head><body>
         <h1>ACORDO DE NEGOCIAÇÃO, CONFISSÃO DE DÍVIDA E NOTAS PROMISSÓRIAS</h1>
         <p><b>Identificação:</b> '.$e($deal->public_id).'</p>
-        <p><b>VENDEDOR/CREDOR:</b> '.$e($deal->seller->name).', CPF '.$e($cpf($deal->seller->cpf)).'.</p>
-        <p><b>COMPRADOR/DEVEDOR:</b> '.$e($deal->buyer->name).', CPF '.$e($cpf($deal->buyer->cpf)).'.</p>
+        <p><b>VENDEDOR/CREDOR:</b> '.$qualification($deal->seller).'.</p>
+        <p><b>COMPRADOR/DEVEDOR:</b> '.$qualification($deal->buyer).'.</p>
         <h2>1. Objeto e valor</h2><p>As partes ajustam a negociação de <b>'.$e($item).'</b>, pelo valor total de <b>'.$money($deal->total_amount).'</b>, com entrada de <b>'.$money($deal->down_payment).'</b> e saldo em '.$deal->installments.' parcela(s), à taxa de '.$e(number_format((float) $deal->monthly_interest, 2, ',', '.')).'% ao mês.</p>
         <h2>2. Confissão de dívida</h2><p>O COMPRADOR/DEVEDOR reconhece como líquida, certa e exigível a obrigação decorrente desta negociação, comprometendo-se a pagar os valores nos vencimentos abaixo.</p>
         <table><thead><tr><th>Parcela</th><th>Vencimento</th><th>Valor</th></tr></thead><tbody>'.$schedule.'</tbody></table>
