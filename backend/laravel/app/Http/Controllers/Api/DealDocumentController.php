@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Services\SignatureValidationService;
+use App\Services\DealEventService;
 
 class DealDocumentController extends Controller
 {
@@ -36,10 +37,15 @@ class DealDocumentController extends Controller
         if (($data['type']==='signed_contract') && ($data['signed']??false)) $deal->update(['status'=>'active']);
         return response()->json(DB::table('deal_documents')->find($id),201);
     }
-    public function storeSignedBase64(Request $request, Deal $deal, SignatureValidationService $validator)
+    public function storeSignedBase64(Request $request, Deal $deal, SignatureValidationService $validator, DealEventService $events)
     {
         abort_unless(in_array($request->user()->id,[$deal->seller_id,$deal->buyer_id],true),403);
-        abort_unless(in_array($deal->status,['signature_pending','signature_validation_pending','signature_validation_rejected'],true),422,'Cadastre as testemunhas e gere o dossiê antes de importar a versão assinada.');
+        $retrying = in_array($deal->status,['signature_validation_pending','signature_validation_rejected'],true);
+        $sellerPhase = $deal->status === 'signature_pending' || ($retrying && !$deal->seller_signed_document_id && (int)$request->user()->id === (int)$deal->seller_id);
+        $buyerPhase = $deal->status === 'counterparty_signature_pending' || ($retrying && $deal->seller_signed_document_id && (int)$request->user()->id === (int)$deal->buyer_id);
+        abort_unless($sellerPhase || $buyerPhase || in_array($deal->status,['signature_validation_pending','signature_validation_rejected'],true),422,'O documento não está na etapa de assinatura.');
+        if ($sellerPhase) abort_unless((int)$request->user()->id === (int)$deal->seller_id,403,'O vendedor precisa assinar primeiro.');
+        if ($buyerPhase) abort_unless((int)$request->user()->id === (int)$deal->buyer_id,403,'Agora o comprador precisa assinar o documento recebido do vendedor.');
 
         $data=$request->validate([
             'file_name'=>['required','string','max:255'],
@@ -64,7 +70,8 @@ class DealDocumentController extends Controller
         ]);
 
         $deal->update(['status'=>'signature_validation_pending']);
-        $result=$validator->validate($binary,$deal);
+        $phase = $sellerPhase ? 'seller' : 'final';
+        $result=$validator->validate($binary,$deal,$phase);
 
         DB::table('deal_documents')->where('id',$id)->update([
             'signed'=>$result['status']==='valid',
@@ -75,21 +82,68 @@ class DealDocumentController extends Controller
             'updated_at'=>now(),
         ]);
 
+        $nextValidStatus = $sellerPhase ? 'counterparty_signature_pending' : 'entry_receipt_pending';
         $deal->update(['status'=>match($result['status']){
-            'valid'=>'active',
+            'valid'=>$nextValidStatus,
             'rejected'=>'signature_validation_rejected',
             default=>'signature_validation_pending',
         }]);
+        if ($result['status'] === 'valid' && $sellerPhase) {
+            $deal->update(['seller_signed_document_id'=>$id]);
+            $events->record($deal,$request->user()->id,'seller_signature_validated',['document_id'=>$id]);
+            $events->notify($deal,$deal->buyer_id,'buyer_signature_required','Documento assinado pelo vendedor','Baixe o documento assinado pelo vendedor, assine digitalmente e devolva pela plataforma.',['deal_id'=>$deal->id]);
+        }
+        if ($result['status'] === 'valid' && !$sellerPhase) {
+            $deal->update(['fully_signed_document_id'=>$id]);
+            $events->record($deal,$request->user()->id,'all_signatures_validated',['document_id'=>$id]);
+            $events->notify($deal,$deal->seller_id,'documental_closing_complete','Etapa documental concluída','As assinaturas foram validadas. Aguardando o comprovante da entrada.',['deal_id'=>$deal->id]);
+        }
 
         return response()->json([
             'document'=>DB::table('deal_documents')->find($id),
             'validation_status'=>$result['status'],
             'message'=>match($result['status']){
-                'valid'=>'Todas as assinaturas exigidas foram validadas. Negociação ativada.',
+                'valid'=>$sellerPhase ? 'Assinatura do vendedor validada. Documento liberado para o comprador.' : 'Assinaturas validadas. Agora envie o comprovante da entrada.',
                 'rejected'=>$result['reason'],
                 default=>'Documento recebido em quarentena e aguardando validação criptográfica.',
             },
         ],202);
+    }
+
+    public function storeEntryReceiptBase64(Request $request, Deal $deal, DealEventService $events)
+    {
+        abort_unless((int)$request->user()->id === (int)$deal->buyer_id,403,'Somente o comprador pode enviar o comprovante da entrada.');
+        abort_unless($deal->status === 'entry_receipt_pending',422,'A etapa documental precisa estar concluída antes do comprovante.');
+        $data=$request->validate(['file_name'=>['required','string','max:255'],'file_base64'=>['required','string']]);
+        $encoded=preg_replace('/^data:(application\/pdf|image\/(jpeg|png|webp));base64,/', '', $data['file_base64']);
+        $binary=base64_decode($encoded,true);
+        abort_unless($binary!==false,422,'Arquivo inválido.');
+        abort_if(strlen($binary)>10*1024*1024,422,'O comprovante deve ter no máximo 10 MB.');
+        $sha256=hash('sha256',$binary);$path='deals/'.$deal->public_id.'/receipts/'.$sha256;
+        Storage::disk('local')->put($path,$binary);
+        $id=DB::table('deal_documents')->insertGetId(['deal_id'=>$deal->id,'uploaded_by'=>$request->user()->id,'type'=>'receipt','storage_path'=>$path,'original_name'=>basename($data['file_name']),'mime_type'=>'application/octet-stream','sha256'=>$sha256,'signed'=>false,'created_at'=>now(),'updated_at'=>now()]);
+        $deal->update(['entry_receipt_document_id'=>$id,'status'=>'entry_confirmation_pending']);
+        $events->record($deal,$request->user()->id,'entry_receipt_uploaded',['document_id'=>$id]);
+        $events->notify($deal,$deal->seller_id,'entry_receipt_received','Comprovante da entrada recebido','Confira o comprovante e confirme o recebimento da entrada.',['deal_id'=>$deal->id]);
+        return response()->json(['message'=>'Comprovante enviado ao vendedor.','document_id'=>$id],201);
+    }
+
+    public function confirmEntryReceipt(Request $request, Deal $deal, DealEventService $events)
+    {
+        abort_unless((int)$request->user()->id === (int)$deal->seller_id,403,'Somente o vendedor pode confirmar o recebimento.');
+        abort_unless($deal->status === 'entry_confirmation_pending' && $deal->entry_receipt_document_id,422,'Não há comprovante aguardando confirmação.');
+        $deal->update(['entry_confirmed_at'=>now(),'status'=>'active']);
+        $events->record($deal,$request->user()->id,'entry_payment_confirmed');
+        $events->notify($deal,$deal->buyer_id,'entry_payment_confirmed','Entrada confirmada','O vendedor confirmou o recebimento. A negociação agora está em acompanhamento das parcelas.',['deal_id'=>$deal->id]);
+        return response()->json(['message'=>'Entrada confirmada. Negociação ativada.']);
+    }
+
+    public function downloadEntryReceipt(Request $request, Deal $deal)
+    {
+        abort_unless(in_array($request->user()->id,[$deal->seller_id,$deal->buyer_id],true),403);
+        $document=$deal->entry_receipt_document_id ? DB::table('deal_documents')->find($deal->entry_receipt_document_id) : null;
+        abort_unless($document && Storage::disk('local')->exists($document->storage_path),404,'Comprovante não disponível.');
+        return Storage::disk('local')->download($document->storage_path,$document->original_name);
     }
 
 }

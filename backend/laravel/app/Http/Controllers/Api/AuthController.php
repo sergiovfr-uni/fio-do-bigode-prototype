@@ -161,6 +161,13 @@ class AuthController extends Controller
         return response()->json($request->user()->fresh());
     }
 
+    public function lookupUser(Request $request)
+    {
+        $data = $request->validate(['email'=>['required','email']]);
+        $user = User::whereRaw('LOWER(email) = ?', [mb_strtolower($data['email'])])->first();
+        return response()->json(['exists'=>(bool)$user,'user'=>$user ? ['name'=>$user->name,'kyc_status'=>$user->kyc_status] : null]);
+    }
+
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()?->delete();

@@ -30,6 +30,7 @@ class DealWitnessController extends Controller
     public function store(Request $request, Deal $deal, ContractService $contracts, DealEventService $events)
     {
         $this->authorizeParty($request, $deal);
+        abort_unless((int)$request->user()->id === (int)$deal->initiator_id, 403, 'Somente quem criou a negociação pode definir as testemunhas.');
         abort_unless($deal->status === 'witnesses_pending', 422, 'As testemunhas só podem ser definidas após o aceite e antes da geração do dossiê.');
         $existing = $deal->witnesses()->get();
         abort_if($existing->count() >= 2, 422, 'As duas testemunhas desta negociação já foram definidas.');
@@ -95,6 +96,7 @@ class DealWitnessController extends Controller
     public function skip(Request $request, Deal $deal, ContractService $contracts, DealEventService $events)
     {
         $this->authorizeParty($request, $deal);
+        abort_unless((int)$request->user()->id === (int)$deal->initiator_id, 403, 'Somente quem criou a negociação pode dispensar as testemunhas.');
         abort_unless($deal->status === 'witnesses_pending', 422, 'Esta escolha só pode ser feita após o aceite e antes da geração do dossiê.');
         abort_if($deal->witnesses()->exists(), 422, 'Já existem testemunhas cadastradas nesta negociação.');
 

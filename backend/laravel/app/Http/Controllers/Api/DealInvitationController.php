@@ -153,7 +153,7 @@ return response()->json($this->inviteResponse($invite, false), 201);
             $sellerId = $invite->initiator_role === 'seller' ? $invite->created_by : $user->id;
             $buyerId = $invite->initiator_role === 'buyer' ? $invite->created_by : $user->id;
             $deal = Deal::create([
-                'seller_id'=>$sellerId,'buyer_id'=>$buyerId,'listing_id'=>null,'origin'=>'direct','title'=>$invite->title,'description'=>$invite->description,
+                'seller_id'=>$sellerId,'buyer_id'=>$buyerId,'initiator_id'=>$invite->created_by,'listing_id'=>null,'origin'=>'direct','title'=>$invite->title,'description'=>$invite->description,
                 'status'=>'proposal_sent','total_amount'=>$invite->total_amount,'down_payment'=>$invite->down_payment,
                 'installments'=>$invite->installments,'monthly_interest'=>$invite->monthly_interest,
             ]);

@@ -44,6 +44,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::patch('/me/contract-qualification', [AuthController::class, 'updateQualification']);
+        Route::get('/users/lookup', [AuthController::class, 'lookupUser']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/notifications', [NotificationController::class, 'index']);
         Route::post('/notifications/read-all', [NotificationController::class, 'readAll']);
@@ -72,6 +73,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/deals/{deal}/documents', [DealDocumentController::class, 'index']);
         Route::post('/deals/{deal}/documents', [DealDocumentController::class, 'store']);
         Route::post('/deals/{deal}/signed-document', [DealDocumentController::class, 'storeSignedBase64']);
+        Route::post('/deals/{deal}/entry-receipt', [DealDocumentController::class, 'storeEntryReceiptBase64']);
+        Route::get('/deals/{deal}/entry-receipt/download', [DealDocumentController::class, 'downloadEntryReceipt']);
+        Route::post('/deals/{deal}/entry-receipt/confirm', [DealDocumentController::class, 'confirmEntryReceipt']);
         Route::get('/deals/{deal}/installments', [InstallmentController::class, 'index']);
         Route::post('/deals/{deal}/installments/{installment}/paid', [InstallmentController::class, 'markPaid']);
         Route::get('/wallet', [WalletController::class, 'show']);

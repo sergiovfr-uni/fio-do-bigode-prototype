@@ -17,7 +17,7 @@ class DealController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        return Deal::query()->with(['listing','seller:id,name,kyc_status,reputation_score,risk_score','buyer:id,name,kyc_status,reputation_score,risk_score','offers','witnesses','installments'])
+        return Deal::query()->with(['listing','seller:id,name,kyc_status,reputation_score,risk_score','buyer:id,name,kyc_status,reputation_score,risk_score','offers','witnesses','paymentSchedule'])
             ->where(fn($q)=>$q->where('seller_id',$user->id)->orWhere('buyer_id',$user->id))->latest()->paginate(20);
     }
 
@@ -100,7 +100,7 @@ class DealController extends Controller
 
     private function createDealWithOffer(int $sellerId,int $buyerId,array $data,string $origin,?int $listingId,int $createdBy,?string $title=null,?string $description=null): Deal
     {
-        $deal = Deal::create(['seller_id'=>$sellerId,'buyer_id'=>$buyerId,'listing_id'=>$listingId,'origin'=>$origin,'title'=>$title,'description'=>$description,'status'=>'proposal_sent','total_amount'=>$data['total_amount'],'down_payment'=>$data['down_payment']??0,'installments'=>$data['installments'],'monthly_interest'=>$data['monthly_interest']??0]);
+        $deal = Deal::create(['seller_id'=>$sellerId,'buyer_id'=>$buyerId,'initiator_id'=>$createdBy,'listing_id'=>$listingId,'origin'=>$origin,'title'=>$title,'description'=>$description,'status'=>'proposal_sent','total_amount'=>$data['total_amount'],'down_payment'=>$data['down_payment']??0,'installments'=>$data['installments'],'monthly_interest'=>$data['monthly_interest']??0]);
         DealOffer::create(['deal_id'=>$deal->id,'created_by'=>$createdBy,'type'=>'proposal','total_amount'=>$deal->total_amount,'down_payment'=>$deal->down_payment,'installments'=>$deal->installments,'monthly_interest'=>$deal->monthly_interest,'status'=>'pending']);
         return $deal;
     }
