@@ -23,6 +23,10 @@ class AuthController extends Controller
             'password' => ['required','string','min:10'],
         ]);
 
+        $data['cpf'] = preg_replace('/\\D+/', '', $data['cpf']);
+        $data['phone'] = preg_replace('/\\D+/', '', $data['phone']);
+        $data['email'] = mb_strtolower(trim($data['email']));
+
         $user = User::create([
             ...$data,
             'password' => Hash::make($data['password']),
@@ -165,26 +169,34 @@ class AuthController extends Controller
     {
         $data = $request->validate(['query'=>['required','string','min:5','max:255']]);
         $query = trim($data['query']);
-        $digits = preg_replace('/\D+/', '', $query);
-        $user = User::query()->where(function ($builder) use ($query, $digits) {
+        $digits = preg_replace('/\\D+/', '', $query);
+        $normalizedPhoneSql = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, '+', ''), '(', ''), ')', ''), '-', ''), ' ', ''), '.', '')";
+
+        $user = User::query()->where(function ($builder) use ($query, $digits, $normalizedPhoneSql) {
             if (filter_var($query, FILTER_VALIDATE_EMAIL)) {
-                $builder->whereRaw('LOWER(email) = ?', [mb_strtolower($query)]);
+                $builder->whereRaw('LOWER(TRIM(email)) = ?', [mb_strtolower($query)]);
                 return;
             }
+
             if (strlen($digits) === 11) {
-                $builder->where('cpf', $digits)->orWhere('phone', $digits)->orWhere('phone', '55'.$digits);
+                $builder->where('cpf', $digits)
+                    ->orWhereRaw($normalizedPhoneSql.' = ?', [$digits])
+                    ->orWhereRaw($normalizedPhoneSql.' = ?', ['55'.$digits]);
                 return;
             }
+
             if (strlen($digits) >= 10) {
-                $builder->where('phone', $digits)->orWhere('phone', '55'.$digits);
+                $builder->whereRaw($normalizedPhoneSql.' = ?', [$digits])
+                    ->orWhereRaw($normalizedPhoneSql.' = ?', ['55'.$digits]);
             }
         })->first();
 
         return response()->json(['exists'=>(bool)$user,'user'=>$user ? [
+            'id'=>$user->id,
             'name'=>$user->name,
             'email'=>$user->email,
             'phone'=>$user->phone,
-            'cpf_masked'=>preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $user->getRawOriginal('cpf')),
+            'cpf_masked'=>preg_replace('/(\\d{3})(\\d{3})(\\d{3})(\\d{2})/', '$1.$2.$3-$4', $user->getRawOriginal('cpf')),
             'kyc_status'=>$user->kyc_status,
         ] : null]);
     }
