@@ -23,8 +23,8 @@ class AuthController extends Controller
             'password' => ['required','string','min:10'],
         ]);
 
-        $data['cpf'] = preg_replace('/\\D+/', '', $data['cpf']);
-        $data['phone'] = preg_replace('/\\D+/', '', $data['phone']);
+        $data['cpf'] = preg_replace('/\D+/', '', $data['cpf']);
+        $data['phone'] = preg_replace('/\D+/', '', $data['phone']);
         $data['email'] = mb_strtolower(trim($data['email']));
 
         $user = User::create([
@@ -169,7 +169,7 @@ class AuthController extends Controller
     {
         $data = $request->validate(['query'=>['required','string','min:5','max:255']]);
         $query = trim($data['query']);
-        $digits = preg_replace('/\\D+/', '', $query);
+        $digits = preg_replace('/\D+/', '', $query);
         $normalizedPhoneSql = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, '+', ''), '(', ''), ')', ''), '-', ''), ' ', ''), '.', '')";
 
         $demoEmails = [
@@ -182,7 +182,7 @@ class AuthController extends Controller
             ->whereNotIn('email', $demoEmails)
             ->where('account_status', 'active')
             ->where(function ($builder) use ($query, $digits, $normalizedPhoneSql) {
-            if (filter_var($query, FILTER_VALIDATE_EMAIL)) {
+                if (filter_var($query, FILTER_VALIDATE_EMAIL)) {
                 $builder->whereRaw('LOWER(TRIM(email)) = ?', [mb_strtolower($query)]);
                 return;
             }
@@ -198,14 +198,14 @@ class AuthController extends Controller
                 $builder->whereRaw($normalizedPhoneSql.' = ?', [$digits])
                     ->orWhereRaw($normalizedPhoneSql.' = ?', ['55'.$digits]);
             }
-            })->first();
+        })->first();
 
         return response()->json(['exists'=>(bool)$user,'user'=>$user ? [
             'id'=>$user->id,
             'name'=>$user->name,
             'email'=>$user->email,
             'phone'=>$user->phone,
-            'cpf_masked'=>preg_replace('/(\\d{3})(\\d{3})(\\d{3})(\\d{2})/', '$1.$2.$3-$4', $user->getRawOriginal('cpf')),
+            'cpf_masked'=>preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $user->getRawOriginal('cpf')),
             'kyc_status'=>$user->kyc_status,
         ] : null]);
     }
