@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Http;
 
 class SignatureValidationService
 {
-    public function validate(string $pdf, Deal $deal): array
+    public function validate(string $pdf, Deal $deal, string $phase = 'final'): array
     {
         $url = env('SIGNATURE_VALIDATOR_URL');
         if (!$url) {
@@ -43,14 +43,14 @@ class SignatureValidationService
             ->values();
 
         $deal->loadMissing(['seller:id,cpf','buyer:id,cpf','witnesses:id,deal_id,cpf']);
-        $required = collect([$deal->seller?->cpf, $deal->buyer?->cpf])
-            ->concat($deal->witnesses->map(fn($witness) => $witness->getRawOriginal('cpf')))
+        $required = collect($phase === 'seller' ? [$deal->seller?->cpf] : [$deal->seller?->cpf, $deal->buyer?->cpf])
+            ->when($phase === 'final', fn($items) => $items->concat($deal->witnesses->map(fn($witness) => $witness->getRawOriginal('cpf'))))
             ->map(fn($identifier) => preg_replace('/\D+/', '', (string)$identifier))
             ->filter()
             ->unique()
             ->values();
 
-        $requiredCount = $deal->witnesses->count() === 2 ? 4 : 2;
+        $requiredCount = $phase === 'seller' ? 1 : ($deal->witnesses->count() === 2 ? 4 : 2);
         $valid = ($response['valid'] ?? false) === true
             && ($response['document_intact'] ?? false) === true
             && $required->count() === $requiredCount
@@ -58,9 +58,11 @@ class SignatureValidationService
 
         return [
             'status'=>$valid ? 'valid' : 'rejected',
-            'reason'=>$valid ? null : ($requiredCount === 4
+            'reason'=>$valid ? null : ($requiredCount === 1
+                ? 'O PDF precisa estar íntegro e conter a assinatura digital válida do vendedor.'
+                : ($requiredCount === 4
                 ? 'O PDF precisa estar íntegro e conter quatro assinaturas válidas: comprador, vendedor e duas testemunhas.'
-                : 'O PDF precisa estar íntegro e conter as assinaturas válidas do comprador e do vendedor.'),
+                : 'O PDF precisa estar íntegro e conter as assinaturas válidas do comprador e do vendedor.')),
             'signers'=>$signatures->all(),
             'report'=>$response,
         ];
