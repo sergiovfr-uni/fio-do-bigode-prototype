@@ -44,7 +44,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::patch('/me/contract-qualification', [AuthController::class, 'updateQualification']);
-        Route::get('/users/lookup', [AuthController::class, 'lookupUser']);
+        Route::get('/users/lookup', [AuthController::class, 'lookupUser'])->middleware('throttle:20,1');
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/notifications', [NotificationController::class, 'index']);
         Route::post('/notifications/read-all', [NotificationController::class, 'readAll']);

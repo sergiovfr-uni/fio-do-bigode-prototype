@@ -163,9 +163,30 @@ class AuthController extends Controller
 
     public function lookupUser(Request $request)
     {
-        $data = $request->validate(['email'=>['required','email']]);
-        $user = User::whereRaw('LOWER(email) = ?', [mb_strtolower($data['email'])])->first();
-        return response()->json(['exists'=>(bool)$user,'user'=>$user ? ['name'=>$user->name,'kyc_status'=>$user->kyc_status] : null]);
+        $data = $request->validate(['query'=>['required','string','min:5','max:255']]);
+        $query = trim($data['query']);
+        $digits = preg_replace('/\D+/', '', $query);
+        $user = User::query()->where(function ($builder) use ($query, $digits) {
+            if (filter_var($query, FILTER_VALIDATE_EMAIL)) {
+                $builder->whereRaw('LOWER(email) = ?', [mb_strtolower($query)]);
+                return;
+            }
+            if (strlen($digits) === 11) {
+                $builder->where('cpf', $digits)->orWhere('phone', $digits)->orWhere('phone', '55'.$digits);
+                return;
+            }
+            if (strlen($digits) >= 10) {
+                $builder->where('phone', $digits)->orWhere('phone', '55'.$digits);
+            }
+        })->first();
+
+        return response()->json(['exists'=>(bool)$user,'user'=>$user ? [
+            'name'=>$user->name,
+            'email'=>$user->email,
+            'phone'=>$user->phone,
+            'cpf_masked'=>preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $user->getRawOriginal('cpf')),
+            'kyc_status'=>$user->kyc_status,
+        ] : null]);
     }
 
     public function logout(Request $request)
