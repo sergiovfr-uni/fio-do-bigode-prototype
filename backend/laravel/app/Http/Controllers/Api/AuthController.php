@@ -172,7 +172,16 @@ class AuthController extends Controller
         $digits = preg_replace('/\\D+/', '', $query);
         $normalizedPhoneSql = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, '+', ''), '(', ''), ')', ''), '-', ''), ' ', ''), '.', '')";
 
-        $user = User::query()->where(function ($builder) use ($query, $digits, $normalizedPhoneSql) {
+        $demoEmails = [
+            'carlos.hml@fiodobigode.com.br',
+            'mariana.hml@fiodobigode.com.br',
+            'rafael.hml@fiodobigode.com.br',
+        ];
+
+        $user = User::query()
+            ->whereNotIn('email', $demoEmails)
+            ->where('account_status', 'active')
+            ->where(function ($builder) use ($query, $digits, $normalizedPhoneSql) {
             if (filter_var($query, FILTER_VALIDATE_EMAIL)) {
                 $builder->whereRaw('LOWER(TRIM(email)) = ?', [mb_strtolower($query)]);
                 return;
@@ -189,7 +198,7 @@ class AuthController extends Controller
                 $builder->whereRaw($normalizedPhoneSql.' = ?', [$digits])
                     ->orWhereRaw($normalizedPhoneSql.' = ?', ['55'.$digits]);
             }
-        })->first();
+            })->first();
 
         return response()->json(['exists'=>(bool)$user,'user'=>$user ? [
             'id'=>$user->id,
