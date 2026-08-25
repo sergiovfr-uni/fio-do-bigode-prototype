@@ -1,5 +1,6 @@
 FROM php:8.3-cli-alpine
-RUN apk add --no-cache git unzip libzip-dev oniguruma-dev icu-dev mysql-client && docker-php-ext-install pdo_mysql mbstring intl zip
+RUN apk add --no-cache git unzip libzip-dev oniguruma-dev icu-dev mysql-client libpng-dev \
+    && docker-php-ext-install pdo_mysql mbstring intl zip gd
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www/html
 COPY . .
