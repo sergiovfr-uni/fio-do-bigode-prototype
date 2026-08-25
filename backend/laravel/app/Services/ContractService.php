@@ -52,7 +52,7 @@ class ContractService
         DB::table('deal_documents')->insert([
             'deal_id' => $deal->id, 'uploaded_by' => $generatedBy, 'type' => 'unsigned_contract',
             'storage_path' => $path, 'original_name' => 'dossie-negociacao-'.$deal->public_id.'.pdf',
-            'mime_type' => 'application/pdf', 'sha256' => $sha256, 'signed' => false,
+            'mime_type' => 'application/pdf', 'sha256' => $sha256, 'signed' => false, 'content_blob' => $pdf,
             'created_at' => now(), 'updated_at' => now(),
         ]);
         return ['path' => $path, 'sha256' => $sha256];
@@ -97,6 +97,7 @@ class ContractService
             'mime_type'=>'application/pdf',
             'sha256'=>$sha256,
             'signed'=>true,
+            'content_blob'=>$pdf,
             'validation_status'=>'valid',
             'signature_provider'=>'fio-do-bigode-electronic',
             'signer_identifiers'=>json_encode($signers, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
