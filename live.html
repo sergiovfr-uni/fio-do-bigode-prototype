@@ -9,7 +9,7 @@
 <section id="invite" class="screen"><span class="step">CONVITE DE NEGOCIAÇÃO</span><div class="title">Você foi convidado</div><div id="inviteCard" class="card">Carregando convite...</div><button id="acceptInviteBtn" class="btn" onclick="acceptInvite()">Entrar nesta negociação</button><button class="btn ghost" onclick="go('home')">Agora não</button><div id="inviteStatus" class="muted"></div></section>
 <section id="witnessInvite" class="screen"><span class="step">CONVITE DE TESTEMUNHA</span><div class="title">Dossiê da negociação</div><div id="witnessInviteCard" class="card">Carregando convite...</div><button id="witnessDownloadBtn" class="btn" onclick="downloadWitnessDossier()">Baixar dossiê</button><div class="notice"><b>Assinatura externa</b><div class="muted">Leia o documento e siga a orientação das partes para assinatura via Gov.br ou certificado ICP-Brasil. Seu acesso é limitado a este dossiê.</div></div><div id="witnessInviteStatus" class="muted"></div></section>
 <section id="home" class="screen"><div><div class="title" id="hello">Olá!</div><div class="muted" id="homeIdentity">Sessão autenticada</div></div><div id="homeDealAlert"></div><div id="notificationArea"></div><div class="section">Parceiros Fio do Bigode</div><div id="campaignArea"><div class="card"><span class="muted">Carregando campanha...</span></div></div><div class="section">Classificados recentes</div><div id="homeListings"></div></section>
-<section id="deals" class="screen"><div class="row"><div><div class="title">Negociações</div><div class="muted">Diretas ou originadas dos Classificados</div></div><span class="badge">LIVE</span></div><div id="dealArea"><div class="card">Carregando negociações...</div></div></section>
+<section id="deals" class="screen"><div class="title">Negociações</div><div class="muted">Escolha como deseja visualizar.</div><div class="row" style="margin:16px 0"><button id="dealMineBtn" class="btn gold" style="margin:0" onclick="showDealView('mine')">Minhas negociações</button><button id="dealProgressBtn" class="btn ghost" style="margin:0" onclick="showDealView('progress')">Em andamento</button></div><div id="dealArea"><div class="card">Carregando negociações...</div></div></section>
 <section id="classifieds" class="screen"><div class="row"><div><div class="title">Classificados</div><div class="muted">Um anúncio pode virar uma negociação</div></div><span class="badge">LIVE</span></div><div id="listingGrid"><div class="card">Carregando anúncios...</div></div></section>
 <section id="listingDetail" class="screen"><button class="btn ghost" onclick="go('classifieds')">← Voltar aos classificados</button><div id="listingDetailBody"></div></section>
 <section id="proposal" class="screen"><div class="title">Fazer proposta</div><div id="proposalListing" class="card"></div><div class="label">Valor total da proposta</div><input id="pTotal" class="input" inputmode="decimal"><div class="label">Valor de entrada</div><input id="pEntry" class="input" inputmode="decimal" value="R$ 0,00"><div class="label">Quantidade de parcelas</div><input id="pQty" class="input" inputmode="numeric" value="12"><div class="label">Juros ao mês</div><input id="pInterest" class="input" inputmode="decimal" value="0,00%"><div class="label">Primeiro vencimento</div><input id="pFirstDue" class="input" type="date"><div class="proposalSummary"><div class="muted">Valor financiado</div><div class="metric" id="pFinanced">R$ 0,00</div><div class="muted" style="margin-top:8px">Parcela estimada</div><b id="pInstallment">R$ 0,00</b></div><button class="btn" onclick="submitProposal()">Enviar proposta</button><button class="btn ghost" onclick="go('classifieds')">Cancelar</button><div id="proposalStatus" class="muted"></div></section>
@@ -128,4 +128,43 @@ openDealDetail=function(id){activeDeal=deals.find(x=>Number(x.id)===Number(id));
 
 setManualPartyFields(false);pFirstDue.value=defaultFirstDue();pFirstDue.min=new Date().toISOString().slice(0,10);dFirstDue.value=defaultFirstDue();dFirstDue.min=new Date().toISOString().slice(0,10);
 if(token){setTimeout(async()=>{await loadMe().catch(()=>{});await loadNotifications();clearInterval(notificationTimer);notificationTimer=setInterval(loadNotifications,15000);if('Notification'in window&&Notification.permission==='default')notificationArea.insertAdjacentHTML('beforeend','<button class="btn ghost" onclick="enableBrowserNotifications()">Ativar avisos neste navegador</button>')},500)}
-</script></body></html>
+
+/* Organização das negociações por visão e papel */
+let fdbDealView='mine';
+function fdbDealRole(d){return Number(d.seller_id)===Number(user.id)?'Venda':'Compra'}
+function fdbDealCard(d){
+    const role=fdbDealRole(d),other=role==='Venda'?d.buyer:d.seller,schedule=d.payment_schedule||[],paid=schedule.filter(i=>i.status==='paid').length;
+    return `<div class="card clickable" onclick="openDealDetail(${d.id})"><div class="row"><span class="badge ${role==='Venda'?'gold':'blue'}">${role}</span><span class="badge ${['active','paid_off'].includes(d.status)?'ok':''}">${dealStatusLabel(d.status)}</span></div><h3>${safe(d.title||d.listing?.title||'Negociação')}</h3><div class="muted">${role==='Venda'?'Comprador':'Vendedor'}: ${safe(other?.name||'Aguardando vínculo')}</div><div class="price">${brl(d.total_amount)}</div><div class="muted">Entrada ${brl(d.down_payment)} • ${dealInstallmentCount(d)}x • juros ${pctBr(d.monthly_interest)}</div>${['active','overdue','paid_off'].includes(d.status)?`<div class="verify">Pagamentos: ${paid}/${schedule.length} parcelas quitadas</div>`:'<div class="muted">Toque para visualizar as ações desta etapa.</div>'}</div>`;
+}
+function fdbInviteCard(i){return `<div class="card"><div class="row"><span class="badge gold">Venda</span><span class="badge">Convite pendente</span></div><h3>${safe(i.title)}</h3><div class="price">${brl(i.total_amount)}</div><div class="muted">${i.installments}x • código ${safe(i.code)}</div><button class="btn ghost" onclick="shareInvite('${i.code}','${String(i.title).replaceAll("'",'')}','${i.invite_url}')">Compartilhar convite</button></div>`}
+function showDealView(view){
+    fdbDealView=view;
+    dealMineBtn.className='btn '+(view==='mine'?'gold':'ghost');
+    dealProgressBtn.className='btn '+(view==='progress'?'gold':'ghost');
+    renderDeals();
+}
+renderDeals=function(){
+    const pendingInvites=invites.filter(i=>i.status==='pending');
+    if(fdbDealView==='progress'){
+        const running=deals.filter(d=>!['paid_off','rejected'].includes(d.status));
+        dealArea.innerHTML='<div class="section">Negociações em andamento</div><div class="notice"><b>Vendas e compras em uma única fila</b><div class="muted">Cada item mostra o seu papel e as ações disponíveis na etapa atual.</div></div>'+pendingInvites.map(fdbInviteCard).join('')+running.map(fdbDealCard).join('')||'<div class="card">Nenhuma negociação em andamento.</div>';
+        if(!pendingInvites.length&&!running.length)dealArea.innerHTML='<div class="card">Nenhuma negociação em andamento.</div>';
+        return;
+    }
+    const sales=deals.filter(d=>Number(d.seller_id)===Number(user.id)),purchases=deals.filter(d=>Number(d.buyer_id)===Number(user.id));
+    let html='<div class="section">Vendas</div>'+(pendingInvites.length?pendingInvites.map(fdbInviteCard).join(''):'')+(sales.length?sales.map(fdbDealCard).join(''):'');
+    if(!pendingInvites.length&&!sales.length)html+='<div class="card muted">Nenhuma venda cadastrada.</div>';
+    html+='<div class="section">Compras</div>'+(purchases.length?purchases.map(fdbDealCard).join(''):'<div class="card muted">Nenhuma compra cadastrada.</div>');
+    dealArea.innerHTML=html;
+}
+const fdbOpenDealDetail=openDealDetail;
+openDealDetail=function(id){
+    fdbOpenDealDetail(id);
+    if(!activeDeal)return;
+    const role=fdbDealRole(activeDeal),other=role==='Venda'?activeDeal.buyer:activeDeal.seller;
+    dealDetailBody.insertAdjacentHTML('afterbegin',`<div class="notice"><div class="row"><b>Você está nesta negociação como</b><span class="badge ${role==='Venda'?'gold':'blue'}">${role}</span></div><div class="muted">${role==='Venda'?'Comprador':'Vendedor'}: ${safe(other?.name||'Aguardando vínculo')}</div></div>`);
+}
+
+</script>
+</body>
+</html>
