@@ -27,10 +27,17 @@ class DealDocumentController extends Controller
                 'documents.sha256',
                 'documents.signed',
                 'documents.created_at',
+                'documents.storage_path',
+                'documents.content_blob',
                 'installments.number as installment_number',
                 'installments.paid_at as installment_paid_at',
             ])
-            ->get();
+            ->get()
+            ->map(function ($document) {
+                $document->available = (bool) $document->content_blob || Storage::disk('local')->exists($document->storage_path);
+                unset($document->storage_path, $document->content_blob);
+                return $document;
+            });
     }
 
     public function download(Request $request, Deal $deal, int $document)
@@ -40,8 +47,16 @@ class DealDocumentController extends Controller
             ->where('deal_id', $deal->id)
             ->where('id', $document)
             ->first();
-        abort_unless($file && Storage::disk('local')->exists($file->storage_path),404,'Documento não disponível.');
-        return Storage::disk('local')->download($file->storage_path,$file->original_name);
+        abort_unless($file,404,'Documento não disponível.');
+        if (Storage::disk('local')->exists($file->storage_path)) {
+            return Storage::disk('local')->download($file->storage_path,$file->original_name);
+        }
+        abort_unless($file->content_blob,410,'O arquivo foi criado antes do armazenamento persistente e não está mais disponível.');
+        return response()->streamDownload(
+            fn () => print($file->content_blob),
+            $file->original_name,
+            ['Content-Type'=>$file->mime_type ?: 'application/octet-stream']
+        );
     }
 
     public function store(Request $request, Deal $deal)
@@ -53,12 +68,13 @@ class DealDocumentController extends Controller
             'signed'=>['nullable','boolean'],
         ]);
         $file=$request->file('file');
+        $binary=file_get_contents($file->getRealPath());
         $sha256=hash_file('sha256',$file->getRealPath());
         $path=$file->storeAs('deals/'.$deal->public_id,$sha256.'.'.$file->getClientOriginalExtension(),'private');
         $id = DB::table('deal_documents')->insertGetId([
             'deal_id'=>$deal->id,'uploaded_by'=>$request->user()->id,'type'=>$data['type'],'storage_path'=>$path,
             'original_name'=>$file->getClientOriginalName(),'mime_type'=>$file->getMimeType(),'sha256'=>$sha256,
-            'signed'=>$data['signed']??false,'created_at'=>now(),'updated_at'=>now(),
+            'signed'=>$data['signed']??false,'content_blob'=>$binary,'created_at'=>now(),'updated_at'=>now(),
         ]);
         if (($data['type']==='signed_contract') && ($data['signed']??false)) $deal->update(['status'=>'active']);
         return response()->json(DB::table('deal_documents')->find($id),201);
@@ -75,7 +91,7 @@ class DealDocumentController extends Controller
 
         if ($buyerPhase) {
             $sellerDocument = DB::table('deal_documents')->find($deal->seller_signed_document_id);
-            abort_unless($sellerDocument && Storage::disk('local')->exists($sellerDocument->storage_path), 422, 'O documento assinado pelo vendedor não está disponível.');
+            abort_unless($sellerDocument && (Storage::disk('local')->exists($sellerDocument->storage_path) || $sellerDocument->content_blob), 422, 'O documento assinado pelo vendedor não está disponível.');
         }
 
         $data=$request->validate([
@@ -90,7 +106,9 @@ class DealDocumentController extends Controller
         abort_if(strlen($binary) > 10 * 1024 * 1024,422,'O PDF deve ter no máximo 10 MB.');
 
         if ($buyerPhase) {
-            $sellerBinary = Storage::disk('local')->get($sellerDocument->storage_path);
+            $sellerBinary = Storage::disk('local')->exists($sellerDocument->storage_path)
+                ? Storage::disk('local')->get($sellerDocument->storage_path)
+                : $sellerDocument->content_blob;
             abort_unless(str_starts_with($binary, $sellerBinary), 422, 'Envie o mesmo PDF recebido do vendedor, preservando a assinatura anterior.');
         }
 
@@ -102,6 +120,7 @@ class DealDocumentController extends Controller
             'deal_id'=>$deal->id,'uploaded_by'=>$request->user()->id,'type'=>'signed_contract','storage_path'=>$path,
             'original_name'=>basename($data['file_name']),'mime_type'=>'application/pdf','sha256'=>$sha256,
             'signed'=>false,'validation_status'=>'pending','signature_provider'=>$data['signature_provider'],
+            'content_blob'=>$binary,
             'created_at'=>now(),'updated_at'=>now(),
         ]);
 
@@ -166,7 +185,7 @@ class DealDocumentController extends Controller
         abort_if(strlen($binary)>10*1024*1024,422,'O comprovante deve ter no máximo 10 MB.');
         $sha256=hash('sha256',$binary);$path='deals/'.$deal->public_id.'/receipts/'.$sha256;
         Storage::disk('local')->put($path,$binary);
-        $id=DB::table('deal_documents')->insertGetId(['deal_id'=>$deal->id,'uploaded_by'=>$request->user()->id,'type'=>'receipt','storage_path'=>$path,'original_name'=>basename($data['file_name']),'mime_type'=>'application/octet-stream','sha256'=>$sha256,'signed'=>false,'created_at'=>now(),'updated_at'=>now()]);
+        $id=DB::table('deal_documents')->insertGetId(['deal_id'=>$deal->id,'uploaded_by'=>$request->user()->id,'type'=>'receipt','storage_path'=>$path,'original_name'=>basename($data['file_name']),'mime_type'=>'application/octet-stream','sha256'=>$sha256,'signed'=>false,'content_blob'=>$binary,'created_at'=>now(),'updated_at'=>now()]);
         $deal->update(['entry_receipt_document_id'=>$id,'status'=>'entry_confirmation_pending']);
         $events->record($deal,$request->user()->id,'entry_receipt_uploaded',['document_id'=>$id]);
         $events->notify($deal,$deal->seller_id,'entry_receipt_received','Comprovante da entrada recebido','Confira o comprovante e confirme o recebimento da entrada.',['deal_id'=>$deal->id]);
@@ -187,8 +206,12 @@ class DealDocumentController extends Controller
     {
         abort_unless(in_array($request->user()->id,[$deal->seller_id,$deal->buyer_id],true),403);
         $document=$deal->entry_receipt_document_id ? DB::table('deal_documents')->find($deal->entry_receipt_document_id) : null;
-        abort_unless($document && Storage::disk('local')->exists($document->storage_path),404,'Comprovante não disponível.');
-        return Storage::disk('local')->download($document->storage_path,$document->original_name);
+        abort_unless($document,404,'Comprovante não disponível.');
+        if (Storage::disk('local')->exists($document->storage_path)) {
+            return Storage::disk('local')->download($document->storage_path,$document->original_name);
+        }
+        abort_unless($document->content_blob,410,'Este comprovante antigo não está mais disponível.');
+        return response()->streamDownload(fn () => print($document->content_blob),$document->original_name);
     }
 
 }

@@ -40,7 +40,7 @@ class InstallmentController extends Controller
         $path = 'deals/'.$deal->public_id.'/installments/'.$installment->number.'/'.$sha256;
         Storage::disk('local')->put($path, $binary);
 
-        DB::transaction(function () use ($deal, $installment, $request, $data, $path, $sha256): void {
+        DB::transaction(function () use ($deal, $installment, $request, $data, $path, $sha256, $binary): void {
             if ($installment->receipt_document_id) {
                 DB::table('deal_documents')->where('id', $installment->receipt_document_id)->delete();
             }
@@ -53,6 +53,7 @@ class InstallmentController extends Controller
                 'mime_type'=>'application/octet-stream',
                 'sha256'=>$sha256,
                 'signed'=>false,
+                'content_blob'=>$binary,
                 'created_at'=>now(),
                 'updated_at'=>now(),
             ]);
@@ -74,8 +75,12 @@ class InstallmentController extends Controller
         abort_unless((int) $installment->deal_id === (int) $deal->id, 404);
         abort_unless(in_array((int) $request->user()->id, [(int) $deal->seller_id, (int) $deal->buyer_id], true), 403);
         $document = $installment->receipt_document_id ? DB::table('deal_documents')->find($installment->receipt_document_id) : null;
-        abort_unless($document && Storage::disk('local')->exists($document->storage_path), 404, 'Comprovante não disponível.');
-        return Storage::disk('local')->download($document->storage_path, $document->original_name);
+        abort_unless($document, 404, 'Comprovante não disponível.');
+        if (Storage::disk('local')->exists($document->storage_path)) {
+            return Storage::disk('local')->download($document->storage_path, $document->original_name);
+        }
+        abort_unless($document->content_blob,410,'Este comprovante antigo não está mais disponível.');
+        return response()->streamDownload(fn () => print($document->content_blob),$document->original_name);
     }
 
     public function markPaid(Request $request, Deal $deal, Installment $installment, DealEventService $events)
