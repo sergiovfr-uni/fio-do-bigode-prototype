@@ -14,8 +14,34 @@ class DealDocumentController extends Controller
 {
     public function index(Request $request, Deal $deal)
     {
-        abort_unless(in_array($request->user()->id,[$deal->seller_id,$deal->buyer_id],true),403);
-        return DB::table('deal_documents')->where('deal_id',$deal->id)->orderBy('created_at')->get();
+        abort_unless(in_array((int)$request->user()->id,[(int)$deal->seller_id,(int)$deal->buyer_id],true),403);
+        return DB::table('deal_documents as documents')
+            ->leftJoin('installments', 'installments.receipt_document_id', '=', 'documents.id')
+            ->where('documents.deal_id',$deal->id)
+            ->orderBy('documents.created_at')
+            ->select([
+                'documents.id',
+                'documents.type',
+                'documents.original_name',
+                'documents.mime_type',
+                'documents.sha256',
+                'documents.signed',
+                'documents.created_at',
+                'installments.number as installment_number',
+                'installments.paid_at as installment_paid_at',
+            ])
+            ->get();
+    }
+
+    public function download(Request $request, Deal $deal, int $document)
+    {
+        abort_unless(in_array((int)$request->user()->id,[(int)$deal->seller_id,(int)$deal->buyer_id],true),403);
+        $file = DB::table('deal_documents')
+            ->where('deal_id', $deal->id)
+            ->where('id', $document)
+            ->first();
+        abort_unless($file && Storage::disk('local')->exists($file->storage_path),404,'Documento não disponível.');
+        return Storage::disk('local')->download($file->storage_path,$file->original_name);
     }
 
     public function store(Request $request, Deal $deal)
