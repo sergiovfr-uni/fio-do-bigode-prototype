@@ -165,6 +165,39 @@ openDealDetail=function(id){
     dealDetailBody.insertAdjacentHTML('afterbegin',`<div class="notice"><div class="row"><span><b>Você está nesta negociação como</b><br><span class="muted">${role==='Venda'?'Comprador':'Vendedor'}: ${safe(other?.name||'Aguardando vínculo')}</span></span><span><span class="badge ${role==='Venda'?'gold':'blue'}">${role}</span> <span class="badge ${fdbPaymentStatuses.includes(activeDeal.status)?'ok':''}">${businessStatus}</span></span></div></div>`);
 }
 
+/* Busca nominal segura da outra parte */
+let fdbPartyCandidates=[];
+const fdbUpdatePartyMode=updatePartyMode;
+updatePartyMode=function(){
+    fdbPartyCandidates=[];
+    fdbUpdatePartyMode();
+    if(dUserStatus.value==='registered'&&window.partySearch){
+        partySearch.placeholder='Digite o nome da pessoa que busca';
+        const help=partySearch.parentElement?.querySelector('.muted');
+        if(help)help.textContent='Digite o nome e selecione a pessoa correta na lista.';
+    }
+}
+lookupRegisteredParty=async function(){
+    const query=partySearch?.value?.trim()||'';
+    if(query.length<2){partyLookupStatus.textContent='Digite ao menos duas letras do nome.';return}
+    registeredPartyVerified=false;partyCandidate=null;fdbPartyCandidates=[];partyLookupStatus.textContent='Buscando usuários...';
+    try{
+        const response=await apiFetch('/v1/users/lookup?query='+encodeURIComponent(query));
+        fdbPartyCandidates=response.users||(response.user?[response.user]:[]);
+        if(!fdbPartyCandidates.length){partyLookupArea.insertAdjacentHTML('beforeend','<div class="notice"><b>Nenhum usuário localizado</b><div class="muted">Confira o nome digitado ou selecione “Não, será convidado”.</div></div>');partyLookupStatus.textContent='';return}
+        const cards=fdbPartyCandidates.map(candidate=>{const phone=document.createElement('input');phone.value=candidate.phone||'';phoneMask(phone);return `<div class="notice"><b>${safe(candidate.name)}</b><div class="muted">${safe(candidate.email)}<br>${safe(phone.value)} • CPF ${safe(candidate.cpf_masked)}<br>Identidade: ${candidate.kyc_status==='verified'?'validada':'pendente'}</div><button class="btn gold" onclick="selectPartyCandidate(${Number(candidate.id)})">Selecionar ${safe(candidate.name.split(' ')[0])}</button></div>`}).join('');
+        partyLookupArea.innerHTML='<div class="label">Pessoas encontradas</div>'+cards+'<button class="btn ghost" onclick="updatePartyMode()">Cancelar busca</button>';
+        partyLookupStatus.textContent=fdbPartyCandidates.length+' usuário(s) encontrado(s). Selecione a pessoa correta.';
+    }catch(error){partyLookupStatus.textContent=error.message}
+}
+selectPartyCandidate=function(id){
+    const selected=fdbPartyCandidates.find(candidate=>Number(candidate.id)===Number(id));
+    if(!selected)return;
+    partyCandidate=selected;dName.value=selected.name;dEmail.value=selected.email;dPhone.value=selected.phone||'';phoneMask(dPhone);registeredPartyVerified=true;
+    partyLookupArea.innerHTML=`<div class="notice"><b>✓ ${safe(selected.name)}</b><div class="muted">${safe(selected.email)}<br>${safe(dPhone.value)} • CPF ${safe(selected.cpf_masked)}</div></div><button class="btn ghost" onclick="updatePartyMode()">Trocar usuário</button>`;
+    partyLookupStatus.innerHTML='<span class="verify">Usuário selecionado e dados importados para a negociação.</span>';
+}
+
 </script>
 </body>
 </html>
