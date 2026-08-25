@@ -38,7 +38,7 @@ class DealInvitationController extends Controller
             'code'=>$i->code,'title'=>$i->title,'description'=>$i->description,'status'=>$i->status,
             'invitee_name'=>$i->invitee_name,'invitee_email'=>$i->invitee_email,'invitee_phone'=>$i->invitee_phone,
             'initiator_role'=>$i->initiator_role,'total_amount'=>$i->total_amount,'down_payment'=>$i->down_payment,
-            'installments'=>$i->installments,'monthly_interest'=>$i->monthly_interest,'expires_at'=>$i->expires_at,
+            'installments'=>$i->installments,'monthly_interest'=>$i->monthly_interest,'first_due_date'=>$i->first_due_date,'expires_at'=>$i->expires_at,
             'invite_url'=>'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html?invite='.$i->code,
         ]);
     }
@@ -52,7 +52,7 @@ class DealInvitationController extends Controller
         return response()->json([
             'code'=>$invite->code,'title'=>$invite->title,'description'=>$invite->description,
             'total_amount'=>$invite->total_amount,'down_payment'=>$invite->down_payment,'installments'=>$invite->installments,
-            'monthly_interest'=>$invite->monthly_interest,'initiator_role'=>$invite->initiator_role,
+            'monthly_interest'=>$invite->monthly_interest,'first_due_date'=>$invite->first_due_date,'initiator_role'=>$invite->initiator_role,
             'created_by'=>['name'=>$creator?->name,'reputation_score'=>$creator?->reputation_score,'kyc_status'=>$creator?->kyc_status],
             'expires_at'=>$invite->expires_at,
         ]);
@@ -66,11 +66,12 @@ class DealInvitationController extends Controller
         // Homologação: negociações diretas ficam sem limite para permitir validação completa da jornada.
 
         $data = $request->validate([
-            'initiator_role'=>['required','in:seller,buyer'],'invitee_name'=>['nullable','string','max:160'],
+            'initiator_role'=>['required','in:seller'],'invitee_name'=>['nullable','string','max:160'],
             'invitee_email'=>['nullable','email','max:255'],'invitee_phone'=>['nullable','string','max:20'],
             'title'=>['required','string','max:180'],'description'=>['required','string','max:5000'],
             'total_amount'=>['required','numeric','min:0.01'],'down_payment'=>['nullable','numeric','min:0'],
             'installments'=>['required','integer','min:1','max:120'],'monthly_interest'=>['nullable','numeric','min:0','max:20'],
+            'first_due_date'=>['required','date','after_or_equal:today'],
         ]);
 
         $fingerprint = $this->fingerprint($user->id, $data);
@@ -110,6 +111,7 @@ class DealInvitationController extends Controller
                 'invitee_name'=>$data['invitee_name']??null,'invitee_email'=>$data['invitee_email']??null,'invitee_phone'=>$data['invitee_phone']??null,
                 'title'=>$data['title'],'description'=>$data['description'],'total_amount'=>$data['total_amount'],
                 'down_payment'=>$data['down_payment']??0,'installments'=>$data['installments'],'monthly_interest'=>$data['monthly_interest']??0,
+                'first_due_date'=>$data['first_due_date'],
                 'status'=>'pending','expires_at'=>$expires,'created_at'=>now(),'updated_at'=>now(),
             ]);
         } catch (QueryException $e) {
@@ -148,18 +150,21 @@ return response()->json($this->inviteResponse($invite, false), 201);
             $invite = DB::table('deal_invitations')->where('code', strtoupper($code))->lockForUpdate()->first();
             abort_unless($invite && $invite->status === 'pending' && (!$invite->expires_at || now()->lte($invite->expires_at)), 404, 'Convite inválido ou expirado.');
             abort_if((int)$invite->created_by === (int)$user->id, 422, 'O criador não pode aceitar o próprio convite.');
+            if ($invite->invitee_email) {
+                abort_unless(mb_strtolower($user->email) === mb_strtolower($invite->invitee_email), 403, 'Este convite pertence a outro usuário.');
+            }
             $inviteCreatorId = (int)$invite->created_by;
 
-            $sellerId = $invite->initiator_role === 'seller' ? $invite->created_by : $user->id;
-            $buyerId = $invite->initiator_role === 'buyer' ? $invite->created_by : $user->id;
+            $sellerId = $invite->created_by;
+            $buyerId = $user->id;
             $deal = Deal::create([
                 'seller_id'=>$sellerId,'buyer_id'=>$buyerId,'initiator_id'=>$invite->created_by,'listing_id'=>null,'origin'=>'direct','title'=>$invite->title,'description'=>$invite->description,
                 'status'=>'proposal_sent','total_amount'=>$invite->total_amount,'down_payment'=>$invite->down_payment,
-                'installments'=>$invite->installments,'monthly_interest'=>$invite->monthly_interest,
+                'installments'=>$invite->installments,'monthly_interest'=>$invite->monthly_interest,'first_due_date'=>$invite->first_due_date,
             ]);
             DealOffer::create([
                 'deal_id'=>$deal->id,'created_by'=>$invite->created_by,'type'=>'proposal','total_amount'=>$invite->total_amount,
-                'down_payment'=>$invite->down_payment,'installments'=>$invite->installments,'monthly_interest'=>$invite->monthly_interest,'status'=>'pending',
+                'down_payment'=>$invite->down_payment,'installments'=>$invite->installments,'monthly_interest'=>$invite->monthly_interest,'first_due_date'=>$invite->first_due_date,'status'=>'pending',
             ]);
             DB::table('deal_invitations')->where('id',$invite->id)->update(['status'=>'accepted','accepted_by'=>$user->id,'accepted_at'=>now(),'updated_at'=>now()]);
             return $deal;
@@ -299,6 +304,7 @@ private function sendInvitationEmail(object $invite, User $creator): void
             'down_payment'=>number_format((float)($data['down_payment'] ?? 0), 2, '.', ''),
             'installments'=>(int)$data['installments'],
             'monthly_interest'=>number_format((float)($data['monthly_interest'] ?? 0), 4, '.', ''),
+            'first_due_date'=>(string)$data['first_due_date'],
         ];
         return hash('sha256', json_encode($payload, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
     }
@@ -317,6 +323,7 @@ private function sendInvitationEmail(object $invite, User $creator): void
             'down_payment'=>number_format((float)$invite->down_payment, 2, '.', ''),
             'installments'=>(int)$invite->installments,
             'monthly_interest'=>number_format((float)$invite->monthly_interest, 4, '.', ''),
+            'first_due_date'=>(string)$invite->first_due_date,
         ], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
     }
 
