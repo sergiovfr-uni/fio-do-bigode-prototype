@@ -130,10 +130,10 @@ setManualPartyFields(false);pFirstDue.value=defaultFirstDue();pFirstDue.min=new 
 if(token){setTimeout(async()=>{await loadMe().catch(()=>{});await loadNotifications();clearInterval(notificationTimer);notificationTimer=setInterval(loadNotifications,15000);if('Notification'in window&&Notification.permission==='default')notificationArea.insertAdjacentHTML('beforeend','<button class="btn ghost" onclick="enableBrowserNotifications()">Ativar avisos neste navegador</button>')},500)}
 
 /* Organização das negociações por visão e papel */
-let fdbDealView='done';
+let fdbDealView='progress';
 const fdbPaymentStatuses=['entry_receipt_pending','entry_confirmation_pending','active','overdue','paid_off'];
 function fdbDealRole(d){return Number(d.seller_id)===Number(user.id)?'Venda':'Compra'}
-function fdbBusinessStatus(d){return d.status==='paid_off'?'Quitada':fdbPaymentStatuses.includes(d.status)?'Em pagamento':dealStatusLabel(d.status)}
+function fdbBusinessStatus(d){if(d.status==='proposal_sent')return Number(d.buyer_id)===Number(user.id)?'Pendente do seu aceite':'Aguardando aceite';return d.status==='paid_off'?'Quitada':fdbPaymentStatuses.includes(d.status)?'Em pagamento':dealStatusLabel(d.status)}
 function fdbDealCard(d){
     const role=fdbDealRole(d),other=role==='Venda'?d.buyer:d.seller,schedule=d.payment_schedule||[],paid=schedule.filter(i=>i.status==='paid').length;
     const businessStatus=fdbBusinessStatus(d);
@@ -147,6 +147,8 @@ function showDealView(view){
     renderDeals();
 }
 renderDeals=function(){
+    dealMineBtn.className='btn '+(fdbDealView==='done'?'gold':'ghost');
+    dealProgressBtn.className='btn '+(fdbDealView==='progress'?'gold':'ghost');
     const pendingInvites=invites.filter(i=>i.status==='pending');
     if(fdbDealView==='progress'){
         const running=deals.filter(d=>!fdbPaymentStatuses.includes(d.status));
@@ -216,9 +218,25 @@ function fdbQualificationMessage(deal){
     const mine=Number(user.id)===Number(deal.seller_id)?deal.seller_qualification_complete:deal.buyer_qualification_complete;
     const other=Number(user.id)===Number(deal.seller_id)?deal.buyer_qualification_complete:deal.seller_qualification_complete;
     let html='<div class="notice"><b>Dados obrigatórios antes do contrato</b>';
-    if(!mine)html+='<div class="muted">Sua qualificação contratual está incompleta.</div><button class="btn gold" onclick="go(\'profile\')">Completar meus dados</button>';
+    if(!mine)html+='<div class="muted">Sua qualificação contratual está incompleta. Mostraremos somente o que falta.</div><button class="btn gold" onclick="openInlineQualification()">Completar dados necessários</button><div id="inlineQualification"></div>';
     if(!other)html+='<div class="muted">A outra parte foi avisada e precisa completar os dados contratuais.</div>';
     return html+'</div>';
+}
+const fdbQualificationFields=[
+    ['identity_document','Documento de identidade / CNH','text'],['birth_date','Data de nascimento','date'],['marital_status','Estado civil','text'],['occupation','Profissão','text'],['nationality','Nacionalidade','text'],['postal_code','CEP','text'],['address_line','Logradouro','text'],['address_number','Número','text'],['district','Bairro','text'],['city','Cidade','text'],['state','UF','state']
+];
+function openInlineQualification(){
+    const area=document.getElementById('inlineQualification');if(!area)return;
+    const missing=fdbQualificationFields.filter(([field])=>!String(user?.[field]||'').trim());
+    const states=['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+    area.innerHTML='<div class="card">'+missing.map(([field,label,type])=>`<div class="label">${label}</div>${type==='state'?`<select id="inline_${field}" class="input"><option value="">Selecione</option>${states.map(state=>`<option>${state}</option>`).join('')}</select>`:`<input id="inline_${field}" class="input" type="${type}" ${field==='postal_code'?'inputmode="numeric" maxlength="9" placeholder="00000-000"':''}>`}`).join('')+'<button class="btn" onclick="saveInlineQualification()">Salvar e voltar à negociação</button><div id="inlineQualificationStatus" class="muted"></div></div>';
+    const postal=document.getElementById('inline_postal_code');if(postal)postal.addEventListener('input',()=>{const digits=postal.value.replace(/\D/g,'').slice(0,8);postal.value=digits.replace(/(\d{5})(\d{1,3})/,'$1-$2')});
+}
+async function saveInlineQualification(){
+    const status=document.getElementById('inlineQualificationStatus');status.textContent='Salvando dados...';
+    const payload={identity_document:user.identity_document,birth_date:user.birth_date,marital_status:user.marital_status,occupation:user.occupation,nationality:user.nationality,address_line:user.address_line,address_number:user.address_number,address_complement:user.address_complement||null,district:user.district,city:user.city,state:user.state,postal_code:user.postal_code};
+    fdbQualificationFields.forEach(([field])=>{const input=document.getElementById('inline_'+field);if(input)payload[field]=input.value.trim()});
+    try{user=await apiFetch('/v1/me/contract-qualification',{method:'PATCH',body:JSON.stringify(payload)});status.textContent='Dados concluídos. Retornando à formalização...';await loadDeals();activeDeal=deals.find(deal=>Number(deal.id)===Number(activeDeal.id));if(activeDeal)openDealDetail(activeDeal.id)}catch(error){status.textContent=error.message}
 }
 const fdbFormalOpenDealDetail=openDealDetail;
 openDealDetail=function(id){
@@ -244,6 +262,85 @@ skipWitnesses=async function(){
         dealActionStatus.textContent='Contrato gerado. Iniciando o download para assinatura do vendedor...';
         await downloadDealDossier();
     }
+}
+
+/* Assinatura eletrônica integrada */
+let fdbSignatureChallenge=null,fdbSignatureInk=false;
+function electronicSignatureHtml(title,description){
+    return `<div class="notice"><b>${title}</b><div class="muted">${description}</div></div>
+        <button class="btn ghost" onclick="downloadDealDossier()">Ler e baixar o contrato</button>
+        <button class="btn" id="signatureCodeBtn" onclick="requestElectronicSignatureCode()">Receber código e assinar agora</button>
+        <div id="electronicSignatureStep" class="hidden"></div>`;
+}
+formalizationHtml=function(d){
+    const mine=Number(user.id),seller=mine===Number(d.seller_id),buyer=mine===Number(d.buyer_id);
+    if(d.status==='witnesses_pending')return witnessDecisionHtml(d);
+    if(d.status==='signature_pending')return seller
+        ?electronicSignatureHtml('Sua assinatura como vendedor','Leia o contrato, confirme sua ciência com o código enviado por e-mail e assine diretamente na tela.')
+        :'<div class="notice"><b>Aguardando a assinatura do vendedor</b><div class="muted">Você será notificado assim que o contrato estiver disponível para sua assinatura.</div></div>';
+    if(d.status==='counterparty_signature_pending')return buyer
+        ?electronicSignatureHtml('Sua assinatura como comprador','O vendedor já assinou. Leia o contrato recebido, confirme o código e assine o mesmo documento na tela.')
+        :'<div class="notice"><b>Contrato enviado ao comprador</b><div class="muted">Aguardando a assinatura eletrônica final.</div></div>';
+    if(d.status==='signature_validation_pending')return '<div class="notice"><b>Documento antigo em validação externa</b><div class="muted">Esta negociação começou no fluxo anterior. Para o teste novo, inicie outra negociação.</div></div>';
+    if(d.status==='signature_validation_rejected')return '<div class="notice"><b>Assinatura externa recusada</b><div class="muted">Esta negociação pertence ao fluxo anterior.</div></div>';
+    return '';
+}
+async function requestElectronicSignatureCode(){
+    const button=document.getElementById('signatureCodeBtn');button.disabled=true;dealActionStatus.textContent='Enviando código para seu e-mail...';
+    try{
+        fdbSignatureChallenge=await apiFetch('/v1/deals/'+activeDeal.id+'/electronic-signature/code',{method:'POST',body:'{}'});
+        const step=document.getElementById('electronicSignatureStep');
+        step.classList.remove('hidden');
+        step.innerHTML=`<div class="label">Código enviado para ${safe(fdbSignatureChallenge.masked_email)}</div>
+            <input id="electronicSignatureCode" class="input" inputmode="numeric" maxlength="6" placeholder="000000">
+            <div class="label">Assine com o dedo ou a caneta</div>
+            <canvas id="electronicSignatureCanvas" style="width:100%;height:180px;border:2px solid #d7b354;border-radius:14px;background:#fff;touch-action:none"></canvas>
+            <button class="btn ghost" onclick="clearElectronicSignature()">Limpar assinatura</button>
+            <label class="notice" style="display:block"><input id="electronicSignatureConsent" type="checkbox"> ${safe(fdbSignatureChallenge.consent_text)}</label>
+            <button class="btn gold" id="confirmElectronicSignatureBtn" onclick="confirmElectronicSignature()">Confirmar e assinar documento</button>`;
+        initElectronicSignatureCanvas();button.textContent='Reenviar código';button.disabled=false;dealActionStatus.textContent=fdbSignatureChallenge.message;
+    }catch(error){button.disabled=false;dealActionStatus.textContent=error.message}
+}
+function initElectronicSignatureCanvas(){
+    const canvas=document.getElementById('electronicSignatureCanvas'),rect=canvas.getBoundingClientRect();
+    canvas.width=Math.max(600,Math.round(rect.width*2));canvas.height=360;fdbSignatureInk=false;
+    const context=canvas.getContext('2d');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.strokeStyle='#111';context.lineWidth=5;context.lineCap='round';context.lineJoin='round';
+    let drawing=false;
+    const point=event=>{const box=canvas.getBoundingClientRect();return {x:(event.clientX-box.left)*(canvas.width/box.width),y:(event.clientY-box.top)*(canvas.height/box.height)}};
+    canvas.onpointerdown=event=>{drawing=true;fdbSignatureInk=true;const p=point(event);context.beginPath();context.moveTo(p.x,p.y);canvas.setPointerCapture?.(event.pointerId)};
+    canvas.onpointermove=event=>{if(!drawing)return;const p=point(event);context.lineTo(p.x,p.y);context.stroke()};
+    canvas.onpointerup=canvas.onpointercancel=()=>{drawing=false};
+}
+function clearElectronicSignature(){initElectronicSignatureCanvas()}
+async function confirmElectronicSignature(){
+    const code=document.getElementById('electronicSignatureCode')?.value.replace(/\D/g,''),consent=document.getElementById('electronicSignatureConsent')?.checked,canvas=document.getElementById('electronicSignatureCanvas'),button=document.getElementById('confirmElectronicSignatureBtn');
+    if(code?.length!==6){dealActionStatus.textContent='Digite os seis números enviados por e-mail.';return}
+    if(!fdbSignatureInk){dealActionStatus.textContent='Desenhe sua assinatura no campo indicado.';return}
+    if(!consent){dealActionStatus.textContent='Confirme a leitura e o aceite para assinar.';return}
+    button.disabled=true;button.textContent='Assinando documento…';dealActionStatus.textContent='Registrando identidade, aceite e integridade do documento...';
+    try{
+        const result=await apiFetch('/v1/deals/'+activeDeal.id+'/electronic-signature/sign',{method:'POST',body:JSON.stringify({challenge_id:fdbSignatureChallenge.challenge_id,code,consent:true,consent_version:fdbSignatureChallenge.consent_version,signature_data_url:canvas.toDataURL('image/png')})});
+        dealActionStatus.textContent=result.message;fdbSignatureChallenge=null;await loadDeals();activeDeal=deals.find(deal=>Number(deal.id)===Number(activeDeal.id));if(activeDeal)openDealDetail(activeDeal.id);
+    }catch(error){button.disabled=false;button.textContent='Confirmar e assinar documento';dealActionStatus.textContent=error.message}
+}
+const fdbSignedDocumentOpenDealDetail=openDealDetail;
+openDealDetail=function(id){
+    fdbSignedDocumentOpenDealDetail(id);
+    if(activeDeal?.fully_signed_document_id)dealDetailBody.insertAdjacentHTML('beforeend','<div class="card"><b>Documento formalizado</b><div class="muted">Contrato assinado pelas duas partes com certificado de evidências.</div><button class="btn ghost" onclick="downloadDealDossier()">Baixar documento final</button></div>');
+}
+
+/* Usuário já cadastrado recebe a negociação dentro do aplicativo */
+const fdbInvitationGenerate=generateInvite;
+generateInvite=async function(){
+    if(dUserStatus.value!=='registered'||!registeredPartyVerified||!partyCandidate?.id){await fdbInvitationGenerate();return}
+    const button=document.getElementById('generateInviteBtn');if(button.disabled)return;
+    const body={buyer_id:Number(partyCandidate.id),title:dTitle.value.trim(),description:dDescription.value.trim(),total_amount:cleanMoney(dTotal.value),down_payment:cleanMoney(dEntry.value),installments:Math.max(1,Number(dQty.value)||1),monthly_interest:pct(dInterest.value),first_due_date:dFirstDue.value};
+    inviteError.textContent='';button.disabled=true;button.textContent='Criando negociação…';
+    try{
+        const deal=await apiFetch('/v1/deals',{method:'POST',body:JSON.stringify(body)});
+        dealForm.style.display='none';inviteArea.innerHTML=`<div class="card"><div class="verify" style="font-size:18px">Negociação criada! ✓</div><h3>${safe(body.title)}</h3><p class="muted">${safe(partyCandidate.name)} recebeu a proposta diretamente no aplicativo, em <b>Em andamento</b>, com status <b>Pendente do seu aceite</b>. O e-mail é apenas um aviso; o aceite acontece dentro do Fio do Bigode.</p><div class="price">${brl(body.total_amount)}</div><button class="btn" onclick="go('deals')">Ver negociações em andamento</button></div>`;
+        fdbDealView='progress';await loadDeals();
+    }catch(error){inviteError.textContent=error.message;button.disabled=false;button.textContent='Gerar convite da negociação'}
 }
 
 </script>
