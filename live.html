@@ -163,8 +163,9 @@ const fdbOpenDealDetail=openDealDetail;
 openDealDetail=function(id){
     fdbOpenDealDetail(id);
     if(!activeDeal)return;
-    const role=fdbDealRole(activeDeal),other=role==='Venda'?activeDeal.buyer:activeDeal.seller,businessStatus=fdbBusinessStatus(activeDeal);
-    dealDetailBody.insertAdjacentHTML('afterbegin',`<div class="notice"><div class="row"><span><b>Você está nesta negociação como</b><br><span class="muted">${role==='Venda'?'Comprador':'Vendedor'}: ${safe(other?.name||'Aguardando vínculo')}</span></span><span><span class="badge ${role==='Venda'?'gold':'blue'}">${role}</span> <span class="badge ${fdbPaymentStatuses.includes(activeDeal.status)?'ok':''}">${businessStatus}</span></span></div></div>`);
+    const role=fdbDealRole(activeDeal),isSeller=role==='Venda',other=isSeller?activeDeal.buyer:activeDeal.seller,businessStatus=fdbBusinessStatus(activeDeal);
+    const roleLabel=isSeller?'Vendedor':'Comprador',relationshipLabel=isSeller?'Você está vendendo para':'Você está comprando de';
+    dealDetailBody.insertAdjacentHTML('afterbegin',`<div class="notice"><div class="row"><span><b>Seu papel: ${roleLabel}</b><br><span class="muted">${relationshipLabel}: <b>${safe(other?.name||'Aguardando vínculo')}</b></span></span><span><span class="badge ${isSeller?'gold':'blue'}">${roleLabel}</span> <span class="badge ${fdbPaymentStatuses.includes(activeDeal.status)?'ok':''}">${businessStatus}</span></span></div></div>`);
 }
 
 /* Busca nominal segura da outra parte */
