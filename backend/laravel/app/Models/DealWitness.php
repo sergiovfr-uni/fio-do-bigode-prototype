@@ -14,7 +14,7 @@ class DealWitness extends Model
     public function getInviteUrlAttribute(): ?string
     {
         return $this->invitation_code
-            ? 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html?witness='.$this->invitation_code
+            ? 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/app.html?witness='.$this->invitation_code
             : null;
     }
 

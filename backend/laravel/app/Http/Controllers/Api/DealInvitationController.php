@@ -39,7 +39,7 @@ class DealInvitationController extends Controller
             'invitee_name'=>$i->invitee_name,'invitee_email'=>$i->invitee_email,'invitee_phone'=>$i->invitee_phone,
             'initiator_role'=>$i->initiator_role,'total_amount'=>$i->total_amount,'down_payment'=>$i->down_payment,
             'installments'=>$i->installments,'monthly_interest'=>$i->monthly_interest,'first_due_date'=>$i->first_due_date,'expires_at'=>$i->expires_at,
-            'invite_url'=>'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html?invite='.$i->code,
+            'invite_url'=>'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/app.html?invite='.$i->code,
         ]);
     }
 
@@ -74,6 +74,12 @@ class DealInvitationController extends Controller
             'first_due_date'=>['required','date','after_or_equal:today'],
         ]);
 
+        abort_if(
+            (float) ($data['down_payment'] ?? 0) > (float) $data['total_amount'],
+            422,
+            'A entrada não pode ser maior que o valor do bem.'
+        );
+
         $fingerprint = $this->fingerprint($user->id, $data);
 
         // Se a mesma negociação já possui convite pendente, reutilizamos o código existente.
@@ -91,6 +97,7 @@ class DealInvitationController extends Controller
                             ->where('down_payment', $data['down_payment'] ?? 0)
                             ->where('installments', $data['installments'])
                             ->where('monthly_interest', $data['monthly_interest'] ?? 0)
+                            ->where('first_due_date', $data['first_due_date'])
                             ->where('invitee_email', $data['invitee_email'] ?? null)
                             ->where('invitee_phone', $data['invitee_phone'] ?? null);
                     });
@@ -181,7 +188,7 @@ private function sendInvitationEmail(object $invite, User $creator): void
         return;
     }
 
-    $inviteUrl = 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html?invite='.$invite->code;
+    $inviteUrl = 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/app.html?invite='.$invite->code;
 
     $name = htmlspecialchars(
         (string) ($invite->invitee_name ?: 'Olá'),
@@ -281,7 +288,7 @@ private function sendInvitationEmail(object $invite, User $creator): void
     {
         return [
             'code'=>$invite->code,
-            'invite_url'=>'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html?invite='.$invite->code,
+            'invite_url'=>'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/app.html?invite='.$invite->code,
             'expires_at'=>$invite->expires_at,
             'reused'=>$reused,
             'message'=>$reused
