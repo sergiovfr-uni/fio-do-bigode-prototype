@@ -74,6 +74,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/deals/{deal}/electronic-signature/code', [ElectronicSignatureController::class, 'requestCode'])->middleware('throttle:5,1');
         Route::post('/deals/{deal}/electronic-signature/sign', [ElectronicSignatureController::class, 'sign'])->middleware('throttle:10,1');
         Route::get('/deals/{deal}/documents', [DealDocumentController::class, 'index']);
+        Route::get('/deals/{deal}/documents/{document}/download', [DealDocumentController::class, 'download']);
         Route::post('/deals/{deal}/documents', [DealDocumentController::class, 'store']);
         Route::post('/deals/{deal}/signed-document', [DealDocumentController::class, 'storeSignedBase64']);
         Route::post('/deals/{deal}/entry-receipt', [DealDocumentController::class, 'storeEntryReceiptBase64']);
