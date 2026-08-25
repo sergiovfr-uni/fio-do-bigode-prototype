@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\ComplianceController;
 use App\Http\Controllers\Api\ContractController;
+use App\Http\Controllers\Api\ElectronicSignatureController;
 use App\Http\Controllers\Api\DealController;
 use App\Http\Controllers\Api\DealDocumentController;
 use App\Http\Controllers\Api\DealInvitationController;
@@ -70,6 +71,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/deals/{deal}/contract', [ContractController::class, 'generate']);
         Route::post('/deals/{deal}/generate-documents', [ContractController::class, 'generate']);
         Route::get('/deals/{deal}/contract/download', [ContractController::class, 'download']);
+        Route::post('/deals/{deal}/electronic-signature/code', [ElectronicSignatureController::class, 'requestCode'])->middleware('throttle:5,1');
+        Route::post('/deals/{deal}/electronic-signature/sign', [ElectronicSignatureController::class, 'sign'])->middleware('throttle:10,1');
         Route::get('/deals/{deal}/documents', [DealDocumentController::class, 'index']);
         Route::post('/deals/{deal}/documents', [DealDocumentController::class, 'store']);
         Route::post('/deals/{deal}/signed-document', [DealDocumentController::class, 'storeSignedBase64']);
