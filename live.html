@@ -344,5 +344,59 @@ generateInvite=async function(){
 }
 
 </script>
+<style>
+.rule{font-size:12px;font-weight:750;color:#b42318;margin:5px 0}
+.rule.ok{color:#23733a}
+.ruleCount{font-size:11px;color:#666;margin-top:7px}
+</style>
+<script>
+function renderPasswordChecklist(value, prefix) {
+    const state = passwordState(value);
+    const items = [
+        ['Length', state.length, 'Mínimo de 10 caracteres'],
+        ['Upper', state.upper, 'Uma letra maiúscula'],
+        ['Lower', state.lower, 'Uma letra minúscula'],
+        ['Number', state.number, 'Um número'],
+        ['Special', state.special, 'Um caractere especial'],
+    ];
+    items.forEach(([suffix, valid, label]) => {
+        const element = document.getElementById(prefix + suffix);
+        if (!element) return;
+        element.classList.toggle('ok', valid);
+        element.textContent = (valid ? '✓ ' : '✕ ') + label;
+    });
+    const count = document.getElementById(prefix + 'Count');
+    if (count) count.textContent = Math.min(value.length, 10) + ' de 10 caracteres mínimos';
+    return Object.values(state).every(Boolean);
+}
+
+function validatePassword() {
+    const valid = renderPasswordChecklist(rPassword.value, 'pw');
+    registerBtn.disabled = !valid;
+    return valid;
+}
+
+function validateResetPassword() {
+    const password = resetNewPassword.value;
+    const confirmation = resetNewPasswordConfirmation.value;
+    const valid = renderPasswordChecklist(password, 'resetPw');
+    const match = confirmation.length > 0 && password === confirmation;
+    resetPwMatch.classList.toggle('ok', match);
+    resetPwMatch.textContent = (match ? '✓ ' : '✕ ') + (match ? 'As senhas são iguais' : 'As senhas precisam ser iguais');
+    resetPasswordBtn.disabled = !(valid && match);
+}
+
+document.querySelectorAll('#passwordRules .rule').forEach(element => {
+    element.textContent = '✕ ' + element.textContent.slice(2);
+});
+passwordRules.insertAdjacentHTML('beforeend', '<div class="ruleCount" id="pwCount">0 de 10 caracteres mínimos</div>');
+
+const resetPasswordWrap = resetNewPassword.closest('.passwordWrap');
+resetPasswordWrap.insertAdjacentHTML('afterend', '<div class="rules"><span class="rule" id="resetPwLength">✕ Mínimo de 10 caracteres</span><span class="rule" id="resetPwUpper">✕ Uma letra maiúscula</span><span class="rule" id="resetPwLower">✕ Uma letra minúscula</span><span class="rule" id="resetPwNumber">✕ Um número</span><span class="rule" id="resetPwSpecial">✕ Um caractere especial</span><div class="ruleCount" id="resetPwCount">0 de 10 caracteres mínimos</div></div>');
+resetNewPasswordConfirmation.closest('.passwordWrap').insertAdjacentHTML('afterend', '<span class="rule" id="resetPwMatch">✕ As senhas precisam ser iguais</span>');
+resetPasswordBtn.disabled = true;
+resetNewPassword.addEventListener('input', validateResetPassword);
+resetNewPasswordConfirmation.addEventListener('input', validateResetPassword);
+</script>
 </body>
 </html>
