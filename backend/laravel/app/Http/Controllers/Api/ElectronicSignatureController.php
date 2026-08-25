@@ -180,7 +180,11 @@ class ElectronicSignatureController extends Controller
         $document = $role === 'buyer' && $deal->seller_signed_document_id
             ? DB::table('deal_documents')->find($deal->seller_signed_document_id)
             : DB::table('deal_documents')->where('deal_id', $deal->id)->where('type', 'unsigned_contract')->latest()->first();
-        abort_unless($document && Storage::disk('local')->exists($document->storage_path), 404, 'Documento não disponível para assinatura.');
+        abort_unless(
+            $document && (Storage::disk('local')->exists($document->storage_path) || $document->content_blob),
+            404,
+            'Documento não disponível para assinatura.'
+        );
         return $document;
     }
 
