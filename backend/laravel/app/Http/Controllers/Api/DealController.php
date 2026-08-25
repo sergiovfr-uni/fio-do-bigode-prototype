@@ -9,14 +9,16 @@ use App\Models\Listing;
 use App\Models\User;
 use App\Services\DealEventService;
 use App\Services\InstallmentService;
+use App\Services\InstallmentReminderService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
 class DealController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, InstallmentReminderService $reminders)
     {
+        $reminders->dispatch();
         $user = $request->user();
 
         $deals = Deal::query()
