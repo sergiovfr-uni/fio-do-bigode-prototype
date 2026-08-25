@@ -11,6 +11,7 @@ use App\Services\DealEventService;
 use App\Services\InstallmentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 
 class DealController extends Controller
 {
@@ -110,6 +111,7 @@ class DealController extends Controller
 
         $events->record($deal, $request->user()->id, 'proposal_created', $offer);
         $events->notify($deal, $buyer->id, 'proposal_received', 'Nova negociação', $request->user()->name.' iniciou uma negociação com você.', ['deal_id'=>$deal->id]);
+        $this->sendRegisteredBuyerNotice($buyer, $request->user(), $deal);
 
         return response()->json($deal->load(['seller:id,name','buyer:id,name','offers']), 201);
     }
@@ -143,6 +145,25 @@ class DealController extends Controller
         $events->notify($deal, $events->otherParty($deal, $user->id), 'counteroffer_received', 'Contraproposta recebida', $user->name.' enviou novas condições para a negociação.', ['deal_id'=>$deal->id]);
 
         return response()->json($offer, 201);
+    }
+
+    private function sendRegisteredBuyerNotice(User $buyer, User $seller, Deal $deal): void
+    {
+        if (!env('RESEND_API_KEY')) return;
+        $buyerName = e($buyer->name);
+        $sellerName = e($seller->name);
+        $title = e($deal->title);
+        $url = 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/app.html';
+        try {
+            Http::withToken(env('RESEND_API_KEY'))->acceptJson()->post('https://api.resend.com/emails', [
+                'from'=>'Fio do Bigode <naoresponda@nofiodobigode.app.br>',
+                'to'=>[$buyer->email],
+                'subject'=>'Nova proposta aguardando seu aceite',
+                'html'=>"<div style='font-family:Arial,sans-serif;max-width:560px;margin:auto'><h2>Nova negociação</h2><p>Olá, {$buyerName}. <b>{$sellerName}</b> enviou a proposta <b>{$title}</b>.</p><p>Ela já está disponível em <b>Negociações → Em andamento</b>. Você pode aceitar ou enviar uma contraproposta diretamente no aplicativo.</p><p style='margin:28px 0'><a href='{$url}' style='background:#111;color:#fff;padding:14px 20px;border-radius:10px;text-decoration:none;font-weight:bold'>Abrir Fio do Bigode</a></p></div>",
+            ])->throw();
+        } catch (\Throwable) {
+            // O registro dentro do aplicativo é a fonte principal; o e-mail é complementar.
+        }
     }
 
     public function accept(Request $request, Deal $deal, InstallmentService $installments, DealEventService $events)
