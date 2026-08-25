@@ -1,21 +1,22 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         if (!Schema::hasColumn('deal_documents', 'content_blob')) {
-            Schema::table('deal_documents', fn (Blueprint $table) => $table->longBlob('content_blob')->nullable());
+            DB::statement('ALTER TABLE deal_documents ADD content_blob LONGBLOB NULL AFTER storage_path');
         }
     }
 
     public function down(): void
     {
         if (Schema::hasColumn('deal_documents', 'content_blob')) {
-            Schema::table('deal_documents', fn (Blueprint $table) => $table->dropColumn('content_blob'));
+            DB::statement('ALTER TABLE deal_documents DROP COLUMN content_blob');
         }
     }
 };
