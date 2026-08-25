@@ -19,7 +19,7 @@ class MvpCoreFlowTest extends TestCase
         $token = $seller->createToken('test')->plainTextToken;
         $this->withToken($token)->postJson('/api/v1/deals',[
             'buyer_id'=>$buyer->id,'title'=>'Notebook','description'=>'Notebook usado em bom estado',
-            'total_amount'=>5000,'down_payment'=>1000,'installments'=>4,'monthly_interest'=>0,
+            'total_amount'=>5000,'down_payment'=>1000,'installments'=>4,'monthly_interest'=>0,'first_due_date'=>now()->addMonth()->toDateString(),
         ])->assertCreated()->assertJsonPath('origin','direct')->assertJsonPath('status','proposal_sent');
     }
 
@@ -29,7 +29,7 @@ class MvpCoreFlowTest extends TestCase
         $buyer = User::create(['name'=>'Buyer','cpf'=>'44444444444','email'=>'verified@test.local','phone'=>'31999990004','password'=>Hash::make('Password123!'),'kyc_status'=>'verified']);
 
         $this->withToken($seller->createToken('test')->plainTextToken)->postJson('/api/v1/deals',[
-            'buyer_id'=>$buyer->id,'title'=>'Moto','description'=>'Moto usada','total_amount'=>12000,'installments'=>12,
+            'buyer_id'=>$buyer->id,'title'=>'Moto','description'=>'Moto usada','total_amount'=>12000,'installments'=>12,'first_due_date'=>now()->addMonth()->toDateString(),
         ])->assertForbidden();
     }
 
