@@ -18,7 +18,7 @@ class DealController extends Controller
     {
         $user = $request->user();
 
-        return Deal::query()
+        $deals = Deal::query()
             ->with([
                 'listing',
                 'seller:id,name,kyc_status,reputation_score,risk_score',
@@ -32,6 +32,20 @@ class DealController extends Controller
                 ->orWhere('buyer_id', $user->id))
             ->latest()
             ->paginate(20);
+
+        $partyIds = $deals->getCollection()
+            ->flatMap(fn (Deal $deal) => [$deal->seller_id, $deal->buyer_id])
+            ->unique();
+        $qualification = User::whereIn('id', $partyIds)
+            ->get()
+            ->mapWithKeys(fn (User $party) => [$party->id => $party->hasContractQualification()]);
+
+        $deals->getCollection()->each(function (Deal $deal) use ($qualification): void {
+            $deal->setAttribute('seller_qualification_complete', (bool) ($qualification[$deal->seller_id] ?? false));
+            $deal->setAttribute('buyer_qualification_complete', (bool) ($qualification[$deal->buyer_id] ?? false));
+        });
+
+        return $deals;
     }
 
     public function fromListing(Request $request, Listing $listing, DealEventService $events)
@@ -160,6 +174,12 @@ class DealController extends Controller
 
         $events->record($deal, $user->id, 'terms_accepted', ['offer_id'=>$offer->id]);
         $events->notify($deal, $deal->seller_id, 'terms_accepted', 'Condições aceitas', 'A negociação foi aceita. Revise os dados, defina as testemunhas e gere o documento.', ['deal_id'=>$deal->id]);
+        if (!$deal->seller->hasContractQualification()) {
+            $events->notify($deal, $deal->seller_id, 'contract_qualification_required', 'Complete os dados do contrato', 'Preencha sua qualificação contratual para que o documento possa ser gerado.', ['deal_id'=>$deal->id]);
+        }
+        if (!$deal->buyer->hasContractQualification()) {
+            $events->notify($deal, $deal->buyer_id, 'contract_qualification_required', 'Complete os dados do contrato', 'Preencha sua qualificação contratual para que o vendedor possa gerar o documento.', ['deal_id'=>$deal->id]);
+        }
 
         return response()->json($deal->fresh(['offers','witnesses','paymentSchedule']));
     }
