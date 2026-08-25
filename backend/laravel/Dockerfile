@@ -9,6 +9,5 @@ RUN mkdir -p bootstrap/cache storage/framework/cache/data storage/framework/sess
     && chmod -R 775 bootstrap/cache storage
 RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 RUN chown -R www-data:www-data storage bootstrap/cache
-RUN chmod +x start.sh
 EXPOSE 8080
-CMD ["./start.sh"]
+CMD php artisan config:cache && php artisan migrate --force && php artisan db:seed --class=PlanSeeder --force && php artisan serve --host=0.0.0.0 --port=${PORT:-8080}
