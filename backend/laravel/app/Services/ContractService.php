@@ -7,6 +7,7 @@ use Dompdf\Dompdf;
 use Dompdf\Options;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Arr;
 
 class ContractService
 {
@@ -16,6 +17,24 @@ class ContractService
         abort_unless(in_array($deal->status, ['witnesses_pending', 'signature_pending'], true), 422, 'A proposta precisa estar aceita antes da geração do dossiê.');
         abort_unless(in_array($deal->witnesses->count(), [0, 2], true), 422, 'O dossiê deve ser gerado sem testemunhas ou com exatamente duas testemunhas.');
         abort_unless($deal->seller->hasContractQualification() && $deal->buyer->hasContractQualification(), 422, 'Comprador e vendedor precisam completar a qualificação contratual antes da geração do dossiê.');
+
+        // As condições comerciais ficam bloqueadas no aceite. A qualificação,
+        // entretanto, pode ser concluída até a geração do documento.
+        $qualificationFields = [
+            'name','identity_document','birth_date','marital_status','occupation','nationality',
+            'email','phone','address_line','address_number','address_complement','district','city','state','postal_code',
+        ];
+        $snapshot = $deal->terms_snapshot ?? [];
+        foreach (['seller', 'buyer'] as $role) {
+            $party = $deal->{$role};
+            $snapshot[$role] = array_merge(
+                $snapshot[$role] ?? [],
+                Arr::only($party->attributesToArray(), $qualificationFields),
+                ['cpf'=>$party->getRawOriginal('cpf')]
+            );
+        }
+        $deal->update(['terms_snapshot'=>$snapshot]);
+        $deal->setAttribute('terms_snapshot', $snapshot);
 
         $html = $this->render($deal);
         $options = new Options();
