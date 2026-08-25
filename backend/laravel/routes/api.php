@@ -80,6 +80,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/deals/{deal}/entry-receipt/download', [DealDocumentController::class, 'downloadEntryReceipt']);
         Route::post('/deals/{deal}/entry-receipt/confirm', [DealDocumentController::class, 'confirmEntryReceipt']);
         Route::get('/deals/{deal}/installments', [InstallmentController::class, 'index']);
+        Route::post('/deals/{deal}/installments/{installment}/receipt', [InstallmentController::class, 'storeReceipt']);
+        Route::get('/deals/{deal}/installments/{installment}/receipt', [InstallmentController::class, 'downloadReceipt']);
         Route::post('/deals/{deal}/installments/{installment}/paid', [InstallmentController::class, 'markPaid']);
         Route::get('/wallet', [WalletController::class, 'show']);
         Route::prefix('admin')->group(function () {
