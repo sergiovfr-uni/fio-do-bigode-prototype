@@ -7,15 +7,23 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::table('installments', function (Blueprint $table) {
-            $table->foreignId('receipt_document_id')->nullable()->after('external_payment_id')
-                ->constrained('deal_documents')->nullOnDelete();
-            $table->timestamp('receipt_uploaded_at')->nullable()->after('receipt_document_id');
-        });
+        if (!Schema::hasColumn('installments', 'receipt_document_id')) {
+            Schema::table('installments', function (Blueprint $table) {
+                $table->foreignId('receipt_document_id')->nullable()->after('external_payment_id')
+                    ->constrained('deal_documents')->nullOnDelete();
+            });
+        }
+        if (!Schema::hasColumn('installments', 'receipt_uploaded_at')) {
+            Schema::table('installments', function (Blueprint $table) {
+                $table->timestamp('receipt_uploaded_at')->nullable()->after('receipt_document_id');
+            });
+        }
 
-        Schema::table('notifications', function (Blueprint $table) {
-            $table->string('reminder_key', 120)->nullable()->unique()->after('type');
-        });
+        if (!Schema::hasColumn('notifications', 'reminder_key')) {
+            Schema::table('notifications', function (Blueprint $table) {
+                $table->string('reminder_key', 120)->nullable()->unique()->after('type');
+            });
+        }
     }
 
     public function down(): void
