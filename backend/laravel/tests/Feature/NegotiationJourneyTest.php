@@ -61,6 +61,60 @@ class NegotiationJourneyTest extends TestCase
         ]);
     }
 
+    public function test_seller_and_buyer_complete_electronic_signature_in_sequence(): void
+    {
+        $seller = $this->verifiedParty('electronic-seller@journey.test', '33333333333');
+        $buyer = $this->verifiedParty('electronic-buyer@journey.test', '44444444444');
+        $sellerToken = $seller->createToken('seller-signature')->plainTextToken;
+        $buyerToken = $buyer->createToken('buyer-signature')->plainTextToken;
+
+        $dealId = $this->withToken($sellerToken)->postJson('/api/v1/deals', [
+            'buyer_id'=>$buyer->id,
+            'title'=>'Eletrônico de teste',
+            'description'=>'Negociação com assinatura eletrônica integrada.',
+            'total_amount'=>1000,
+            'down_payment'=>100,
+            'installments'=>3,
+            'monthly_interest'=>0,
+            'first_due_date'=>now()->addMonth()->toDateString(),
+        ])->assertCreated()->json('id');
+
+        $this->withToken($buyerToken)->postJson('/api/v1/deals/'.$dealId.'/accept')->assertOk();
+        $this->withToken($sellerToken)->postJson('/api/v1/deals/'.$dealId.'/witnesses/skip')
+            ->assertOk()->assertJsonPath('status', 'signature_pending');
+
+        $sellerChallenge = $this->withToken($sellerToken)
+            ->postJson('/api/v1/deals/'.$dealId.'/electronic-signature/code')
+            ->assertOk()->json();
+        $this->withToken($sellerToken)->postJson('/api/v1/deals/'.$dealId.'/electronic-signature/sign', [
+            'challenge_id'=>$sellerChallenge['challenge_id'],
+            'code'=>$sellerChallenge['test_code'],
+            'consent'=>true,
+            'consent_version'=>'1.0',
+            'signature_data_url'=>$this->signaturePng(),
+        ])->assertOk()->assertJsonPath('status', 'counterparty_signature_pending');
+
+        $buyerChallenge = $this->withToken($buyerToken)
+            ->postJson('/api/v1/deals/'.$dealId.'/electronic-signature/code')
+            ->assertOk()->json();
+        $this->withToken($buyerToken)->postJson('/api/v1/deals/'.$dealId.'/electronic-signature/sign', [
+            'challenge_id'=>$buyerChallenge['challenge_id'],
+            'code'=>$buyerChallenge['test_code'],
+            'consent'=>true,
+            'consent_version'=>'1.0',
+            'signature_data_url'=>$this->signaturePng(),
+        ])->assertOk()->assertJsonPath('status', 'entry_receipt_pending');
+
+        $this->assertDatabaseHas('deal_electronic_signatures', ['deal_id'=>$dealId, 'role'=>'seller']);
+        $this->assertDatabaseHas('deal_electronic_signatures', ['deal_id'=>$dealId, 'role'=>'buyer']);
+        $this->assertDatabaseHas('deals', ['id'=>$dealId, 'status'=>'entry_receipt_pending']);
+    }
+
+    private function signaturePng(): string
+    {
+        return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+    }
+
     private function verifiedParty(string $email, string $cpf): User
     {
         return User::create([
