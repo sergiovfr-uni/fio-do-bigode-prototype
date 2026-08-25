@@ -1,30 +1,73 @@
 <?php
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Deal;
 use App\Models\Installment;
 use App\Models\WalletAccount;
+use App\Services\DealEventService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class InstallmentController extends Controller
 {
- public function index(Request $request, Deal $deal){
-  abort_unless(in_array($request->user()->id,[$deal->seller_id,$deal->buyer_id],true),403);
-  return response()->json($deal->installments()->get());
- }
- public function markPaid(Request $request, Deal $deal, Installment $installment){
-  abort_unless($installment->deal_id===$deal->id,404);
-  abort_unless(in_array($request->user()->id,[$deal->seller_id,$deal->buyer_id],true),403);
-  $data=$request->validate(['external_payment_id'=>['nullable','string','max:120'],'description'=>['nullable','string','max:255']]);
-  DB::transaction(function()use($deal,$installment,$data){
-   if($installment->status==='paid') return;
-   $installment->update(['status'=>'paid','paid_at'=>now(),'external_payment_id'=>$data['external_payment_id']??null]);
-   $sellerWallet=WalletAccount::firstOrCreate(['user_id'=>$deal->seller_id],['provider'=>'mock','status'=>'active','available_balance'=>0]);
-   $sellerWallet->transactions()->create(['deal_id'=>$deal->id,'installment_id'=>$installment->id,'type'=>'installment','direction'=>'credit','amount'=>$installment->amount,'status'=>'posted','external_id'=>$data['external_payment_id']??null,'description'=>$data['description']??('Parcela '.$installment->number),'occurred_at'=>now()]);
-   $sellerWallet->increment('available_balance',(float)$installment->amount);
-  });
-  return response()->json($installment->fresh());
- }
+    public function index(Request $request, Deal $deal)
+    {
+        abort_unless(in_array((int) $request->user()->id, [(int) $deal->seller_id, (int) $deal->buyer_id], true), 403);
+
+        return response()->json($deal->installments()->get());
+    }
+
+    public function markPaid(Request $request, Deal $deal, Installment $installment, DealEventService $events)
+    {
+        abort_unless((int) $installment->deal_id === (int) $deal->id, 404);
+        abort_unless((int) $request->user()->id === (int) $deal->seller_id, 403, 'Somente o vendedor pode confirmar o recebimento da parcela.');
+        abort_unless(in_array($deal->status, ['active','overdue'], true), 422, 'A negociação ainda não está na fase de pagamentos.');
+
+        $data = $request->validate([
+            'external_payment_id'=>['nullable','string','max:120'],
+            'description'=>['nullable','string','max:255'],
+        ]);
+
+        DB::transaction(function () use ($deal, $installment, $data) {
+            if ($installment->status === 'paid') return;
+
+            $installment->update([
+                'status'=>'paid',
+                'paid_at'=>now(),
+                'external_payment_id'=>$data['external_payment_id'] ?? null,
+            ]);
+
+            $sellerWallet = WalletAccount::firstOrCreate(
+                ['user_id'=>$deal->seller_id],
+                ['provider'=>'mock','status'=>'active','available_balance'=>0]
+            );
+
+            $sellerWallet->transactions()->create([
+                'deal_id'=>$deal->id,
+                'installment_id'=>$installment->id,
+                'type'=>'installment',
+                'direction'=>'credit',
+                'amount'=>$installment->amount,
+                'status'=>'posted',
+                'external_id'=>$data['external_payment_id'] ?? null,
+                'description'=>$data['description'] ?? ('Parcela '.$installment->number),
+                'occurred_at'=>now(),
+            ]);
+
+            $sellerWallet->increment('available_balance', (float) $installment->amount);
+        });
+
+        $events->record($deal, $request->user()->id, 'installment_confirmed', ['installment_id'=>$installment->id,'number'=>$installment->number]);
+        $events->notify($deal, $deal->buyer_id, 'installment_confirmed', 'Pagamento confirmado', 'O vendedor confirmou o recebimento da parcela '.$installment->number.'.', ['deal_id'=>$deal->id,'installment_id'=>$installment->id]);
+
+        if (!$deal->installments()->where('status', '!=', 'paid')->exists()) {
+            $deal->update(['status'=>'paid_off','paid_off_at'=>now()]);
+            $events->record($deal, $request->user()->id, 'deal_paid_off');
+            $events->notify($deal, $deal->buyer_id, 'deal_paid_off', 'Negociação quitada', 'Todas as parcelas foram confirmadas. A negociação está quitada.', ['deal_id'=>$deal->id]);
+        }
+
+        return response()->json($installment->fresh());
+    }
 }
