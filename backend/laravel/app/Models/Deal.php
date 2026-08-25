@@ -8,8 +8,8 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 class Deal extends Model
 {
     use HasUuids;
-    protected $fillable = ['public_id','seller_id','buyer_id','initiator_id','listing_id','origin','title','description','status','total_amount','down_payment','installments','monthly_interest','terms_locked_at','seller_signed_document_id','fully_signed_document_id','entry_receipt_document_id','entry_confirmed_at'];
-    protected $casts = ['total_amount'=>'decimal:2','down_payment'=>'decimal:2','monthly_interest'=>'decimal:4','terms_locked_at'=>'datetime','entry_confirmed_at'=>'datetime'];
+    protected $fillable = ['public_id','seller_id','buyer_id','initiator_id','listing_id','origin','title','description','status','total_amount','down_payment','installments','monthly_interest','first_due_date','terms_locked_at','terms_snapshot','formalized_at','paid_off_at','seller_signed_document_id','fully_signed_document_id','entry_receipt_document_id','entry_confirmed_at'];
+    protected $casts = ['total_amount'=>'decimal:2','down_payment'=>'decimal:2','monthly_interest'=>'decimal:4','first_due_date'=>'date:Y-m-d','terms_locked_at'=>'datetime','terms_snapshot'=>'array','formalized_at'=>'datetime','paid_off_at'=>'datetime','entry_confirmed_at'=>'datetime'];
     public function uniqueIds(): array { return ['public_id']; }
     public function seller(){ return $this->belongsTo(User::class,'seller_id'); }
     public function buyer(){ return $this->belongsTo(User::class,'buyer_id'); }
