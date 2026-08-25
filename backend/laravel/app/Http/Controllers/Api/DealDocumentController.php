@@ -47,6 +47,11 @@ class DealDocumentController extends Controller
         if ($sellerPhase) abort_unless((int)$request->user()->id === (int)$deal->seller_id,403,'O vendedor precisa assinar primeiro.');
         if ($buyerPhase) abort_unless((int)$request->user()->id === (int)$deal->buyer_id,403,'Agora o comprador precisa assinar o documento recebido do vendedor.');
 
+        if ($buyerPhase) {
+            $sellerDocument = DB::table('deal_documents')->find($deal->seller_signed_document_id);
+            abort_unless($sellerDocument && Storage::disk('local')->exists($sellerDocument->storage_path), 422, 'O documento assinado pelo vendedor não está disponível.');
+        }
+
         $data=$request->validate([
             'file_name'=>['required','string','max:255'],
             'file_base64'=>['required','string'],
@@ -57,6 +62,11 @@ class DealDocumentController extends Controller
         $binary=base64_decode($encoded, true);
         abort_unless($binary !== false && str_starts_with($binary, '%PDF-'),422,'PDF inválido.');
         abort_if(strlen($binary) > 10 * 1024 * 1024,422,'O PDF deve ter no máximo 10 MB.');
+
+        if ($buyerPhase) {
+            $sellerBinary = Storage::disk('local')->get($sellerDocument->storage_path);
+            abort_unless(str_starts_with($binary, $sellerBinary), 422, 'Envie o mesmo PDF recebido do vendedor, preservando a assinatura anterior.');
+        }
 
         $sha256=hash('sha256',$binary);
         $path='deals/'.$deal->public_id.'/quarantine/'.$sha256.'.pdf';
@@ -82,7 +92,9 @@ class DealDocumentController extends Controller
             'updated_at'=>now(),
         ]);
 
-        $nextValidStatus = $sellerPhase ? 'counterparty_signature_pending' : 'entry_receipt_pending';
+        $nextValidStatus = $sellerPhase
+            ? 'counterparty_signature_pending'
+            : ((float) $deal->down_payment > 0 ? 'entry_receipt_pending' : 'active');
         $deal->update(['status'=>match($result['status']){
             'valid'=>$nextValidStatus,
             'rejected'=>'signature_validation_rejected',
@@ -94,16 +106,23 @@ class DealDocumentController extends Controller
             $events->notify($deal,$deal->buyer_id,'buyer_signature_required','Documento assinado pelo vendedor','Baixe o documento assinado pelo vendedor, assine digitalmente e devolva pela plataforma.',['deal_id'=>$deal->id]);
         }
         if ($result['status'] === 'valid' && !$sellerPhase) {
-            $deal->update(['fully_signed_document_id'=>$id]);
+            $deal->update(['fully_signed_document_id'=>$id,'formalized_at'=>now()]);
             $events->record($deal,$request->user()->id,'all_signatures_validated',['document_id'=>$id]);
-            $events->notify($deal,$deal->seller_id,'documental_closing_complete','Etapa documental concluída','As assinaturas foram validadas. Aguardando o comprovante da entrada.',['deal_id'=>$deal->id]);
+            $message = (float) $deal->down_payment > 0
+                ? 'As assinaturas foram validadas. Aguardando o comprovante da entrada.'
+                : 'As assinaturas foram validadas. A negociação entrou no acompanhamento das parcelas.';
+            $events->notify($deal,$deal->seller_id,'documental_closing_complete','Etapa documental concluída',$message,['deal_id'=>$deal->id]);
         }
 
         return response()->json([
             'document'=>DB::table('deal_documents')->find($id),
             'validation_status'=>$result['status'],
             'message'=>match($result['status']){
-                'valid'=>$sellerPhase ? 'Assinatura do vendedor validada. Documento liberado para o comprador.' : 'Assinaturas validadas. Agora envie o comprovante da entrada.',
+                'valid'=>$sellerPhase
+                    ? 'Assinatura do vendedor validada. Documento liberado para o comprador.'
+                    : ((float) $deal->down_payment > 0
+                        ? 'Assinaturas validadas. Agora envie o comprovante da entrada.'
+                        : 'Assinaturas validadas. Negociação em acompanhamento.'),
                 'rejected'=>$result['reason'],
                 default=>'Documento recebido em quarentena e aguardando validação criptográfica.',
             },
