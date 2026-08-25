@@ -116,15 +116,17 @@ class AuthController extends Controller
     public function forgotPassword(Request $request)
     {
         $data = $request->validate(['email'=>['required','email']]);
-        $user = User::where('email',$data['email'])->first();
+        $email = mb_strtolower(trim($data['email']));
+        $user = User::where('email',$email)->first();
         if ($user) {
             $plain = Str::random(64);
             DB::table('password_reset_tokens')->updateOrInsert(
                 ['email'=>$user->email],
                 ['token'=>hash('sha256',$plain),'created_at'=>now()]
             );
+            $this->sendPasswordResetLink($user, $plain);
         }
-        return response()->json(['message'=>'Se o e-mail existir, enviaremos as instruções de recuperação.']);
+        return response()->json(['message'=>'Se o e-mail estiver cadastrado, enviaremos um link de recuperação válido por 30 minutos.']);
     }
 
     public function resetPassword(Request $request)
@@ -134,12 +136,16 @@ class AuthController extends Controller
             'token'=>['required','string','size:64'],
             'password'=>['required','string','min:10','confirmed'],
         ]);
-        $row = DB::table('password_reset_tokens')->where('email',$data['email'])->first();
-        abort_unless($row && hash_equals($row->token, hash('sha256',$data['token'])) && now()->diffInMinutes($row->created_at) <= 30, 422, 'Token inválido ou expirado.');
-        $user = User::where('email',$data['email'])->firstOrFail();
+        $email = mb_strtolower(trim($data['email']));
+        $row = DB::table('password_reset_tokens')
+            ->where('email',$email)
+            ->where('created_at','>=',now()->subMinutes(30))
+            ->first();
+        abort_unless($row && hash_equals($row->token, hash('sha256',$data['token'])), 422, 'Link inválido ou expirado. Solicite uma nova recuperação.');
+        $user = User::where('email',$email)->firstOrFail();
         $user->update(['password'=>Hash::make($data['password'])]);
         $user->tokens()->delete();
-        DB::table('password_reset_tokens')->where('email',$data['email'])->delete();
+        DB::table('password_reset_tokens')->where('email',$email)->delete();
         return response()->json(['message'=>'Senha redefinida. Faça login novamente.']);
     }
 
@@ -227,6 +233,26 @@ class AuthController extends Controller
                 'to'=>[$user->email],
                 'subject'=>'Seu código de acesso ao Fio do Bigode',
                 'html'=>"<div style='font-family:Arial,sans-serif;max-width:560px;margin:auto'><h2>Confirme seu acesso</h2><p>Use o código abaixo para entrar:</p><div style='font-size:32px;font-weight:bold;letter-spacing:8px;padding:20px;background:#f5f2ea;text-align:center'>{$code}</div><p>O código expira em 5 minutos e só pode ser usado uma vez.</p><p style='font-size:12px;color:#777'>Se você não tentou entrar, ignore esta mensagem.</p></div>",
+            ])
+            ->throw();
+    }
+
+    private function sendPasswordResetLink(User $user, string $token): void
+    {
+        abort_unless(env('RESEND_API_KEY'), 503, 'Recuperação de senha temporariamente indisponível.');
+
+        $url = 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/app.html?reset='.
+            rawurlencode($token).'&email='.rawurlencode($user->email);
+        $name = e($user->name);
+        $safeUrl = e($url);
+
+        Http::withToken(env('RESEND_API_KEY'))
+            ->acceptJson()
+            ->post('https://api.resend.com/emails', [
+                'from'=>'Fio do Bigode <naoresponda@nofiodobigode.app.br>',
+                'to'=>[$user->email],
+                'subject'=>'Redefina sua senha do Fio do Bigode',
+                'html'=>"<div style='font-family:Arial,sans-serif;max-width:560px;margin:auto'><h2>Redefinição de senha</h2><p>Olá, {$name}.</p><p>Recebemos uma solicitação para redefinir sua senha.</p><p style='margin:28px 0'><a href='{$safeUrl}' style='background:#111;color:#fff;padding:14px 20px;border-radius:10px;text-decoration:none;font-weight:bold'>Criar nova senha</a></p><p>O link expira em 30 minutos e só pode ser usado uma vez.</p><p style='font-size:12px;color:#777'>Se você não solicitou a recuperação, ignore esta mensagem. Sua senha continua a mesma.</p></div>",
             ])
             ->throw();
     }
