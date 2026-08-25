@@ -31,9 +31,8 @@ class ContractController extends Controller
     {
         abort_unless(in_array((int) $request->user()->id, [(int) $deal->seller_id, (int) $deal->buyer_id], true), 403);
 
-        $documentId = (int) $request->user()->id === (int) $deal->buyer_id && $deal->seller_signed_document_id
-            ? $deal->seller_signed_document_id
-            : null;
+        $documentId = $deal->fully_signed_document_id
+            ?: ((int) $request->user()->id === (int) $deal->buyer_id ? $deal->seller_signed_document_id : null);
 
         $document = $documentId
             ? DB::table('deal_documents')->find($documentId)
