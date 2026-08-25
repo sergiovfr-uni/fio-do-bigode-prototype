@@ -198,6 +198,54 @@ selectPartyCandidate=function(id){
     partyLookupStatus.innerHTML='<span class="verify">Usuário selecionado e dados importados para a negociação.</span>';
 }
 
+/* Clareza de contraproposta e continuidade da formalização */
+function fdbDate(value){return value?new Date(value+'T12:00:00').toLocaleDateString('pt-BR'):'Não informado'}
+function fdbCounterofferChanges(deal,offer){
+    const ordered=[...(deal.offers||[])].sort((a,b)=>Number(a.id)-Number(b.id)),index=ordered.findIndex(item=>Number(item.id)===Number(offer.id)),previous=index>0?ordered[index-1]:null;
+    if(!previous)return '';
+    const changes=[];
+    if(Number(previous.total_amount)!==Number(offer.total_amount))changes.push(`Valor: ${brl(previous.total_amount)} → <b>${brl(offer.total_amount)}</b>`);
+    if(Number(previous.down_payment)!==Number(offer.down_payment))changes.push(`Entrada: ${brl(previous.down_payment)} → <b>${brl(offer.down_payment)}</b>`);
+    if(Number(previous.installments)!==Number(offer.installments))changes.push(`Parcelas: ${previous.installments}x → <b>${offer.installments}x</b>`);
+    if(Number(previous.monthly_interest)!==Number(offer.monthly_interest))changes.push(`Juros: ${pctBr(previous.monthly_interest)} → <b>${pctBr(offer.monthly_interest)}</b>`);
+    if(String(previous.first_due_date||'')!==String(offer.first_due_date||''))changes.push(`Primeiro vencimento: ${fdbDate(previous.first_due_date)} → <b>${fdbDate(offer.first_due_date)}</b>`);
+    return changes.length?'<div class="notice"><b>Alterações propostas</b><div style="margin-top:8px">'+changes.join('<br>')+'</div></div>':'<div class="notice">A outra parte reenviou as mesmas condições.</div>';
+}
+function fdbQualificationMessage(deal){
+    if(deal.seller_qualification_complete&&deal.buyer_qualification_complete)return '';
+    const mine=Number(user.id)===Number(deal.seller_id)?deal.seller_qualification_complete:deal.buyer_qualification_complete;
+    const other=Number(user.id)===Number(deal.seller_id)?deal.buyer_qualification_complete:deal.seller_qualification_complete;
+    let html='<div class="notice"><b>Dados obrigatórios antes do contrato</b>';
+    if(!mine)html+='<div class="muted">Sua qualificação contratual está incompleta.</div><button class="btn gold" onclick="go(\'profile\')">Completar meus dados</button>';
+    if(!other)html+='<div class="muted">A outra parte foi avisada e precisa completar os dados contratuais.</div>';
+    return html+'</div>';
+}
+const fdbFormalOpenDealDetail=openDealDetail;
+openDealDetail=function(id){
+    fdbFormalOpenDealDetail(id);
+    if(!activeDeal)return;
+    const pending=[...(activeDeal.offers||[])].filter(offer=>offer.status==='pending').sort((a,b)=>Number(b.id)-Number(a.id))[0];
+    if(activeDeal.status==='counteroffer'&&pending&&Number(pending.created_by)!==Number(user.id)){
+        const author=Number(pending.created_by)===Number(activeDeal.buyer_id)?'comprador':'vendedor';
+        dealDetailBody.insertAdjacentHTML('afterbegin',`<div class="card"><span class="badge blue">Contraproposta do ${author}</span><h3>Confira antes de aceitar</h3>${fdbCounterofferChanges(activeDeal,pending)}</div>`);
+    }
+    if(activeDeal.status==='witnesses_pending'){
+        const message=fdbQualificationMessage(activeDeal);
+        if(message)dealDetailBody.insertAdjacentHTML('beforeend',message);
+        const blocked=!activeDeal.seller_qualification_complete||!activeDeal.buyer_qualification_complete;
+        if(blocked)dealDetailBody.querySelectorAll('button[onclick="skipWitnesses()"],button[onclick="toggleWitnessForm()"]')?.forEach(button=>{button.disabled=true;button.title='Complete os dados contratuais das duas partes.'});
+    }
+}
+const fdbSkipWitnesses=skipWitnesses;
+skipWitnesses=async function(){
+    if(!activeDeal.seller_qualification_complete||!activeDeal.buyer_qualification_complete){dealActionStatus.textContent='O contrato será liberado quando comprador e vendedor completarem os dados contratuais.';return}
+    await fdbSkipWitnesses();
+    if(activeDeal?.status==='signature_pending'&&Number(user.id)===Number(activeDeal.seller_id)){
+        dealActionStatus.textContent='Contrato gerado. Iniciando o download para assinatura do vendedor...';
+        await downloadDealDossier();
+    }
+}
+
 </script>
 </body>
 </html>
