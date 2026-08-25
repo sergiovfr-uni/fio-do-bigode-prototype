@@ -398,5 +398,90 @@ resetPasswordBtn.disabled = true;
 resetNewPassword.addEventListener('input', validateResetPassword);
 resetNewPasswordConfirmation.addEventListener('input', validateResetPassword);
 </script>
+<style>
+.receiptPicker{display:grid;gap:9px;margin:12px 0}
+.receiptPicker .btn{display:block;text-align:center;box-sizing:border-box}
+.receiptSelected{padding:11px;border-radius:12px;background:#f7f5f1;color:#555;font-size:12px;word-break:break-word}
+</style>
+<script>
+const openDealDetailBeforeReceiptPicker = openDealDetail;
+openDealDetail = function(id) {
+    openDealDetailBeforeReceiptPicker(id);
+    if (!activeDeal || activeDeal.status !== 'entry_receipt_pending' || Number(user.id) !== Number(activeDeal.buyer_id)) return;
+    const original = document.getElementById('entryReceiptFile');
+    if (!original) return;
+    original.accept = 'image/*,application/pdf,.pdf';
+    original.hidden = true;
+    original.classList.remove('input');
+    original.insertAdjacentHTML('afterend',
+        '<input id="entryReceiptCamera" type="file" accept="image/*" capture="environment" hidden>' +
+        '<div class="receiptPicker">' +
+        '<label class="btn gold" for="entryReceiptCamera">Tirar foto do comprovante</label>' +
+        '<label class="btn ghost" for="entryReceiptFile">Escolher foto ou arquivo PDF</label>' +
+        '<div class="receiptSelected" id="entryReceiptSelected">Nenhum arquivo selecionado</div>' +
+        '</div>'
+    );
+    const camera = document.getElementById('entryReceiptCamera');
+    original.addEventListener('change', () => selectEntryReceiptFile(original, camera));
+    camera.addEventListener('change', () => selectEntryReceiptFile(camera, original));
+    const sendButton = [...dealDetailBody.querySelectorAll('button')].find(button => button.getAttribute('onclick') === 'uploadEntryReceipt()');
+    if (sendButton) sendButton.disabled = true;
+};
+
+function selectEntryReceiptFile(source, other) {
+    if (!source.files?.length) return;
+    other.value = '';
+    const file = source.files[0];
+    const allowed = file.type === 'application/pdf' || file.type.startsWith('image/');
+    const sizeOk = file.size <= 10 * 1024 * 1024;
+    entryReceiptSelected.textContent = allowed && sizeOk
+        ? 'Selecionado: ' + file.name + ' • ' + (file.size / 1024 / 1024).toFixed(2).replace('.', ',') + ' MB'
+        : (!allowed ? 'Formato inválido. Use foto ou PDF.' : 'Arquivo maior que 10 MB.');
+    entryReceiptSelected.style.color = allowed && sizeOk ? '#23733a' : '#b42318';
+    const sendButton = [...dealDetailBody.querySelectorAll('button')].find(button => button.getAttribute('onclick') === 'uploadEntryReceipt()');
+    if (sendButton) sendButton.disabled = !(allowed && sizeOk);
+}
+
+uploadEntryReceipt = async function() {
+    const regular = document.getElementById('entryReceiptFile');
+    const camera = document.getElementById('entryReceiptCamera');
+    const file = regular?.files?.[0] || camera?.files?.[0];
+    if (!file) {
+        dealActionStatus.textContent = 'Tire uma foto ou escolha um arquivo PDF.';
+        return;
+    }
+    const sendButton = [...dealDetailBody.querySelectorAll('button')].find(button => button.getAttribute('onclick') === 'uploadEntryReceipt()');
+    if (sendButton) {
+        sendButton.disabled = true;
+        sendButton.textContent = 'Enviando comprovante…';
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+        try {
+            const response = await apiFetch('/v1/deals/' + activeDeal.id + '/entry-receipt', {
+                method: 'POST',
+                body: JSON.stringify({file_name: file.name || 'comprovante.jpg', file_base64: reader.result})
+            });
+            dealActionStatus.textContent = response.message;
+            await loadDeals();
+            openDealDetail(activeDeal.id);
+        } catch (error) {
+            dealActionStatus.textContent = error.message;
+            if (sendButton) {
+                sendButton.disabled = false;
+                sendButton.textContent = 'Enviar comprovante';
+            }
+        }
+    };
+    reader.onerror = () => {
+        dealActionStatus.textContent = 'Não foi possível ler o arquivo selecionado.';
+        if (sendButton) {
+            sendButton.disabled = false;
+            sendButton.textContent = 'Enviar comprovante';
+        }
+    };
+    reader.readAsDataURL(file);
+};
+</script>
 </body>
 </html>
