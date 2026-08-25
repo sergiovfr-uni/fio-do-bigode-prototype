@@ -173,7 +173,7 @@ class AuthController extends Controller
 
     public function lookupUser(Request $request)
     {
-        $data = $request->validate(['query'=>['required','string','min:5','max:255']]);
+        $data = $request->validate(['query'=>['required','string','min:2','max:255']]);
         $query = trim($data['query']);
         $digits = preg_replace('/\D+/', '', $query);
         $normalizedPhoneSql = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, '+', ''), '(', ''), ')', ''), '-', ''), ' ', ''), '.', '')";
@@ -184,36 +184,52 @@ class AuthController extends Controller
             'rafael.hml@fiodobigode.com.br',
         ];
 
-        $user = User::query()
+        $users = User::query()
             ->whereNotIn('email', $demoEmails)
             ->where('account_status', 'active')
+            ->where('id', '!=', $request->user()->id)
             ->where(function ($builder) use ($query, $digits, $normalizedPhoneSql) {
                 if (filter_var($query, FILTER_VALIDATE_EMAIL)) {
-                $builder->whereRaw('LOWER(TRIM(email)) = ?', [mb_strtolower($query)]);
-                return;
-            }
+                    $builder->whereRaw('LOWER(TRIM(email)) = ?', [mb_strtolower($query)]);
+                    return;
+                }
 
-            if (strlen($digits) === 11) {
-                $builder->where('cpf', $digits)
-                    ->orWhereRaw($normalizedPhoneSql.' = ?', [$digits])
-                    ->orWhereRaw($normalizedPhoneSql.' = ?', ['55'.$digits]);
-                return;
-            }
+                if (strlen($digits) === 11) {
+                    $builder->where('cpf', $digits)
+                        ->orWhereRaw($normalizedPhoneSql.' = ?', [$digits])
+                        ->orWhereRaw($normalizedPhoneSql.' = ?', ['55'.$digits]);
+                    return;
+                }
 
-            if (strlen($digits) >= 10) {
-                $builder->whereRaw($normalizedPhoneSql.' = ?', [$digits])
-                    ->orWhereRaw($normalizedPhoneSql.' = ?', ['55'.$digits]);
-            }
-        })->first();
+                if (strlen($digits) >= 10) {
+                    $builder->whereRaw($normalizedPhoneSql.' = ?', [$digits])
+                        ->orWhereRaw($normalizedPhoneSql.' = ?', ['55'.$digits]);
+                    return;
+                }
 
-        return response()->json(['exists'=>(bool)$user,'user'=>$user ? [
+                // Texto livre é sempre tratado como nome. Sem este filtro, a
+                // consulta retornava o primeiro usuário ativo da base.
+                $name = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], mb_strtolower($query));
+                $builder->whereRaw('LOWER(TRIM(name)) LIKE ?', ['%'.$name.'%']);
+            })
+            ->orderBy('name')
+            ->limit(10)
+            ->get();
+
+        $results = $users->map(fn (User $user) => [
             'id'=>$user->id,
             'name'=>$user->name,
             'email'=>$user->email,
             'phone'=>$user->phone,
             'cpf_masked'=>preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $user->getRawOriginal('cpf')),
             'kyc_status'=>$user->kyc_status,
-        ] : null]);
+        ])->values();
+
+        return response()->json([
+            'exists'=>$results->isNotEmpty(),
+            'user'=>$results->first(),
+            'users'=>$results,
+        ]);
     }
 
     public function logout(Request $request)
