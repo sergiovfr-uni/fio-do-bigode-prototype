@@ -233,12 +233,17 @@ class DealController extends Controller
 
     private function termsSnapshot(Deal $deal, DealOffer $offer): array
     {
-        $party = fn (User $user) => collect($user->toArray())
-            ->only([
-                'id','name','cpf','identity_document','birth_date','marital_status','occupation',
-                'nationality','email','phone','address_line','address_number','address_complement',
-                'district','city','state','postal_code','kyc_status',
-            ])->all();
+        $party = function (User $user): array {
+            $data = collect($user->toArray())
+                ->only([
+                    'id','name','identity_document','birth_date','marital_status','occupation',
+                    'nationality','email','phone','address_line','address_number','address_complement',
+                    'district','city','state','postal_code','kyc_status',
+                ])->all();
+            $data['cpf'] = $user->getRawOriginal('cpf');
+
+            return $data;
+        };
 
         return [
             'seller'=>$party($deal->seller),
