@@ -124,38 +124,42 @@ class ElectronicSignatureController extends Controller
         $evidenceJson = json_encode($evidence, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
         $evidenceSeal = hash_hmac('sha256', $evidenceJson, (string) config('app.key'));
 
-        DB::table('deal_electronic_signatures')->where('id', $signature->id)->update([
-            'verified_at'=>$signedAt,
-            'signed_at'=>$signedAt,
-            'signature_image_path'=>$imagePath,
-            'signature_image_sha256'=>$imageHash,
-            'consent_version'=>self::CONSENT_VERSION,
-            'consent_text_sha256'=>$consentHash,
-            'ip_address'=>$request->ip(),
-            'user_agent'=>Str::limit((string) $request->userAgent(), 500, ''),
-            'evidence'=>$evidenceJson,
-            'evidence_seal'=>$evidenceSeal,
-            'updated_at'=>$signedAt,
-        ]);
+        [$generated, $message] = DB::transaction(function () use ($signature, $signedAt, $imagePath, $imageHash, $consentHash, $request, $evidenceJson, $evidenceSeal, $contracts, $deal, $role, $events) {
+            DB::table('deal_electronic_signatures')->where('id', $signature->id)->update([
+                'verified_at'=>$signedAt,
+                'signed_at'=>$signedAt,
+                'signature_image_path'=>$imagePath,
+                'signature_image_sha256'=>$imageHash,
+                'consent_version'=>self::CONSENT_VERSION,
+                'consent_text_sha256'=>$consentHash,
+                'ip_address'=>$request->ip(),
+                'user_agent'=>Str::limit((string) $request->userAgent(), 500, ''),
+                'evidence'=>$evidenceJson,
+                'evidence_seal'=>$evidenceSeal,
+                'updated_at'=>$signedAt,
+            ]);
 
-        $generated = $contracts->generateElectronicVersion($deal->fresh(), $request->user()->id, $role);
-        DB::table('deal_electronic_signatures')->where('id', $signature->id)->update([
-            'signed_document_sha256'=>$generated['sha256'],
-            'updated_at'=>now(),
-        ]);
+            $generated = $contracts->generateElectronicVersion($deal->fresh(), $request->user()->id, $role);
+            DB::table('deal_electronic_signatures')->where('id', $signature->id)->update([
+                'signed_document_sha256'=>$generated['sha256'],
+                'updated_at'=>now(),
+            ]);
 
-        if ($role === 'seller') {
-            $deal->update(['seller_signed_document_id'=>$generated['document_id'], 'status'=>'counterparty_signature_pending']);
-            $events->record($deal, $request->user()->id, 'seller_electronic_signature_completed', ['document_id'=>$generated['document_id'], 'sha256'=>$generated['sha256']]);
-            $events->notify($deal, $deal->buyer_id, 'buyer_signature_required', 'Contrato pronto para sua assinatura', 'O vendedor assinou eletronicamente. Leia o documento e conclua sua assinatura no Fio do Bigode.', ['deal_id'=>$deal->id]);
-            $message = 'Assinatura do vendedor concluída. O comprador foi notificado.';
-        } else {
-            $nextStatus = (float) $deal->down_payment > 0 ? 'entry_receipt_pending' : 'active';
-            $deal->update(['fully_signed_document_id'=>$generated['document_id'], 'formalized_at'=>now(), 'status'=>$nextStatus]);
-            $events->record($deal, $request->user()->id, 'all_electronic_signatures_completed', ['document_id'=>$generated['document_id'], 'sha256'=>$generated['sha256']]);
-            $events->notify($deal, $deal->seller_id, 'documental_closing_complete', 'Contrato assinado pelas duas partes', (float) $deal->down_payment > 0 ? 'A formalização terminou. Agora aguarde o comprovante da entrada.' : 'A formalização terminou e a negociação entrou no acompanhamento das parcelas.', ['deal_id'=>$deal->id]);
-            $message = 'Assinaturas concluídas. O documento final e o certificado de evidências estão disponíveis.';
-        }
+            if ($role === 'seller') {
+                $deal->update(['seller_signed_document_id'=>$generated['document_id'], 'status'=>'counterparty_signature_pending']);
+                $events->record($deal, $request->user()->id, 'seller_electronic_signature_completed', ['document_id'=>$generated['document_id'], 'sha256'=>$generated['sha256']]);
+                $events->notify($deal, $deal->buyer_id, 'buyer_signature_required', 'Contrato pronto para sua assinatura', 'O vendedor assinou eletronicamente. Leia o documento e conclua sua assinatura no Fio do Bigode.', ['deal_id'=>$deal->id]);
+                $message = 'Assinatura do vendedor concluída. O comprador foi notificado.';
+            } else {
+                $nextStatus = (float) $deal->down_payment > 0 ? 'entry_receipt_pending' : 'active';
+                $deal->update(['fully_signed_document_id'=>$generated['document_id'], 'formalized_at'=>now(), 'status'=>$nextStatus]);
+                $events->record($deal, $request->user()->id, 'all_electronic_signatures_completed', ['document_id'=>$generated['document_id'], 'sha256'=>$generated['sha256']]);
+                $events->notify($deal, $deal->seller_id, 'documental_closing_complete', 'Contrato assinado pelas duas partes', (float) $deal->down_payment > 0 ? 'A formalização terminou. Agora aguarde o comprovante da entrada.' : 'A formalização terminou e a negociação entrou no acompanhamento das parcelas.', ['deal_id'=>$deal->id]);
+                $message = 'Assinaturas concluídas. O documento final e o certificado de evidências estão disponíveis.';
+            }
+
+            return [$generated, $message];
+        });
 
         return response()->json([
             'message'=>$message,
