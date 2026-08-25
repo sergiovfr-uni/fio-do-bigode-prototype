@@ -38,10 +38,19 @@ class ContractController extends Controller
             ? DB::table('deal_documents')->find($documentId)
             : DB::table('deal_documents')->where('deal_id',$deal->id)->where('type','unsigned_contract')->latest()->first();
 
-        abort_unless($document && Storage::disk('local')->exists($document->storage_path), 404, 'Documento ainda não disponível para esta parte.');
+        abort_unless($document, 404, 'Documento ainda não disponível para esta parte.');
 
-        return Storage::disk('local')->download(
-            $document->storage_path,
+        if (Storage::disk('local')->exists($document->storage_path)) {
+            return Storage::disk('local')->download(
+                $document->storage_path,
+                $document->original_name,
+                ['Content-Type'=>'application/pdf']
+            );
+        }
+
+        abort_unless($document->content_blob, 410, 'O arquivo foi criado antes do armazenamento persistente e não está mais disponível.');
+        return response()->streamDownload(
+            fn () => print($document->content_blob),
             $document->original_name,
             ['Content-Type'=>'application/pdf']
         );
