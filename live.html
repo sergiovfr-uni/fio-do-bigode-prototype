@@ -483,5 +483,125 @@ uploadEntryReceipt = async function() {
     reader.readAsDataURL(file);
 };
 </script>
+<style>
+.installmentActions{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.installmentActions .btn{width:auto;margin:0;padding:11px 13px}
+.installmentForm{width:100%;margin-top:10px;padding-top:10px;border-top:1px solid #e8e3da}
+.dueAlert{font-size:11px;font-weight:800;color:#8a5a00}
+.dueAlert.overdue{color:#b42318}
+</style>
+<script>
+function formatInstallmentDate(value) {
+    if (!value) return 'Data não informada';
+    const raw = String(value).slice(0, 10);
+    const parts = raw.split('-').map(Number);
+    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return 'Data não informada';
+    return new Date(parts[0], parts[1] - 1, parts[2]).toLocaleDateString('pt-BR');
+}
+
+function installmentDueLabel(value) {
+    const raw = String(value || '').slice(0, 10);
+    const due = new Date(raw + 'T12:00:00');
+    if (Number.isNaN(due.getTime())) return '';
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const days = Math.round((due - today) / 86400000);
+    if (days === 1) return '<div class="dueAlert">Vence amanhã</div>';
+    if (days === 0) return '<div class="dueAlert">Vence hoje</div>';
+    if (days === -1) return '<div class="dueAlert overdue">Venceu ontem</div>';
+    if (days < -1) return '<div class="dueAlert overdue">Vencida há ' + Math.abs(days) + ' dias</div>';
+    return '';
+}
+
+paymentTrackingHtml = function(deal) {
+    const seller = Number(user.id) === Number(deal.seller_id);
+    const rows = (deal.payment_schedule || []).map(installment => {
+        let actions = '';
+        if (installment.status === 'paid') {
+            actions = '<span class="badge ok">Paga</span>';
+        } else if (seller && installment.receipt_document_id) {
+            actions = '<div class="installmentActions"><button class="btn ghost" onclick="downloadInstallmentReceipt(' + installment.id + ')">Ver comprovante</button><button class="btn" onclick="markInstallmentPaid(' + installment.id + ')">Confirmar recebimento</button></div>';
+        } else if (seller) {
+            actions = '<span class="badge">Aguardando comprovante</span>';
+        } else if (installment.receipt_document_id || installment.status === 'receipt_submitted') {
+            actions = '<span class="badge blue">Comprovante enviado</span>';
+        } else {
+            actions = '<button class="btn gold" style="width:auto" onclick="openInstallmentPayment(' + installment.id + ')">Adiantar/pagar parcela</button>';
+        }
+        return '<div class="card" id="installmentRow' + installment.id + '"><div class="row"><span><b>' + installment.number + 'ª parcela</b><br>' + formatInstallmentDate(installment.due_date) + installmentDueLabel(installment.due_date) + '<b>' + brl(installment.amount) + '</b></span>' + actions + '</div><div class="installmentForm hidden" id="installmentForm' + installment.id + '"></div></div>';
+    }).join('');
+    return '<div class="card"><h3>' + (deal.status === 'paid_off' ? 'Negociação quitada' : 'Acompanhamento das parcelas') + '</h3><div class="muted">Os vencimentos seguem mensalmente a partir da primeira data acordada.</div>' + (rows || '<div class="muted">Parcelas ainda não disponíveis.</div>') + '</div>';
+};
+
+function openInstallmentPayment(id) {
+    const form = document.getElementById('installmentForm' + id);
+    if (!form) return;
+    form.classList.remove('hidden');
+    form.innerHTML = '<b>Comprovante da parcela</b><div class="muted">Você pode adiantar a parcela mesmo antes do vencimento.</div>' +
+        '<input id="installmentCamera' + id + '" type="file" accept="image/*" capture="environment" hidden>' +
+        '<input id="installmentFile' + id + '" type="file" accept="image/*,application/pdf,.pdf" hidden>' +
+        '<div class="receiptPicker"><label class="btn gold" for="installmentCamera' + id + '">Tirar foto</label><label class="btn ghost" for="installmentFile' + id + '">Escolher foto ou PDF</label><div class="receiptSelected" id="installmentSelected' + id + '">Nenhum arquivo selecionado</div></div>' +
+        '<button class="btn" id="installmentSend' + id + '" disabled onclick="uploadInstallmentReceipt(' + id + ')">Enviar comprovante</button>';
+    const camera = document.getElementById('installmentCamera' + id);
+    const file = document.getElementById('installmentFile' + id);
+    camera.addEventListener('change', () => selectInstallmentReceipt(id, camera, file));
+    file.addEventListener('change', () => selectInstallmentReceipt(id, file, camera));
+}
+
+function selectInstallmentReceipt(id, source, other) {
+    if (!source.files?.length) return;
+    other.value = '';
+    const file = source.files[0];
+    const allowed = file.type === 'application/pdf' || file.type.startsWith('image/');
+    const sizeOk = file.size <= 10 * 1024 * 1024;
+    const selected = document.getElementById('installmentSelected' + id);
+    selected.textContent = allowed && sizeOk ? 'Selecionado: ' + file.name : (!allowed ? 'Formato inválido. Use foto ou PDF.' : 'Arquivo maior que 10 MB.');
+    selected.style.color = allowed && sizeOk ? '#23733a' : '#b42318';
+    document.getElementById('installmentSend' + id).disabled = !(allowed && sizeOk);
+}
+
+async function uploadInstallmentReceipt(id) {
+    const regular = document.getElementById('installmentFile' + id);
+    const camera = document.getElementById('installmentCamera' + id);
+    const file = regular?.files?.[0] || camera?.files?.[0];
+    if (!file) return;
+    const button = document.getElementById('installmentSend' + id);
+    button.disabled = true;
+    button.textContent = 'Enviando…';
+    const reader = new FileReader();
+    reader.onload = async () => {
+        try {
+            const response = await apiFetch('/v1/deals/' + activeDeal.id + '/installments/' + id + '/receipt', {
+                method: 'POST',
+                body: JSON.stringify({file_name:file.name || 'comprovante.jpg', file_base64:reader.result})
+            });
+            dealActionStatus.textContent = response.message;
+            await loadDeals();
+            openDealDetail(activeDeal.id);
+        } catch (error) {
+            dealActionStatus.textContent = error.message;
+            button.disabled = false;
+            button.textContent = 'Enviar comprovante';
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+async function downloadInstallmentReceipt(id) {
+    try {
+        const response = await fetch(API + '/v1/deals/' + activeDeal.id + '/installments/' + id + '/receipt', {headers:{Authorization:'Bearer ' + token}});
+        if (!response.ok) throw new Error('Não foi possível abrir o comprovante.');
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = 'comprovante-parcela-' + id;
+        anchor.click();
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        dealActionStatus.textContent = error.message;
+    }
+}
+</script>
 </body>
 </html>
