@@ -36,6 +36,7 @@ class ListingController extends Controller
             'description'=>['required','string','max:5000'],
             'cover_image'=>['required','string','max:900000'],
             'price'=>['required','numeric','min:0.01'],
+            'accepts_trade'=>['sometimes','boolean'],
         ]);
         abort_unless(str_starts_with($data['cover_image'],'data:image/'), 422, 'A imagem principal é inválida.');
 
