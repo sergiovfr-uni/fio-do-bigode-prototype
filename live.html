@@ -824,5 +824,134 @@ refreshDiditKyc=async function(){
     startKycBtn.classList.toggle('hidden',status==='verified'||status==='review');
 };
 </script>
+<style>
+.input.fieldInvalid{border:2px solid #b42318;background:#fff7f6;box-shadow:0 0 0 3px #b4231814}
+.fieldError{display:block;color:#b42318;font-size:12px;font-weight:750;margin:-5px 0 10px}
+.consentInvalid{border:2px solid #b42318!important;background:#fff7f6!important}
+.formErrorSummary{display:none;background:#fff1ef;border:1px solid #f0aaa2;color:#7a271a;border-radius:14px;padding:12px;margin:12px 0;font-size:13px;font-weight:750}
+.formErrorSummary.on{display:block}
+</style>
+<script>
+const registrationFields={cpf:rCpf,name:rName,email:rEmail,phone:rPhone,password:rPassword};
+const registrationMessages={
+    cpf:'Informe um CPF com 11 dígitos.',
+    name:'Informe o nome completo.',
+    email:'Informe um e-mail válido.',
+    phone:'Informe um celular com DDD.',
+    password:'Crie uma senha que atenda a todos os requisitos.'
+};
+
+registerStatus.className='formErrorSummary';
+registerBtn.insertAdjacentElement('beforebegin',registerStatus);
+
+function clearRegistrationErrors(){
+    Object.values(registrationFields).forEach(field=>{
+        field.classList.remove('fieldInvalid');
+        document.getElementById('error-'+field.id)?.remove();
+    });
+    [cTerms,cPrivacy,cResp].forEach(item=>item.closest('label')?.classList.remove('consentInvalid'));
+    registerStatus.classList.remove('on');
+    registerStatus.textContent='';
+}
+
+function showRegistrationFieldError(key,message){
+    const field=registrationFields[key];
+    if(!field)return null;
+    field.classList.add('fieldInvalid');
+    const error=document.createElement('span');
+    error.id='error-'+field.id;
+    error.className='fieldError';
+    error.textContent=message||registrationMessages[key];
+    const anchor=key==='password'?field.closest('.passwordWrap'):field;
+    anchor.insertAdjacentElement('afterend',error);
+    return field;
+}
+
+function focusRegistrationError(field){
+    if(!field)return;
+    field.scrollIntoView({behavior:'smooth',block:'center'});
+    setTimeout(()=>field.focus({preventScroll:true}),350);
+}
+
+function validateRegistrationForm(){
+    clearRegistrationErrors();
+    const errors=[];
+    const cpf=rCpf.value.replace(/\D/g,'');
+    const phone=rPhone.value.replace(/\D/g,'');
+    if(cpf.length!==11)errors.push(['cpf',registrationMessages.cpf]);
+    if(rName.value.trim().split(/\s+/).length<2)errors.push(['name',registrationMessages.name]);
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rEmail.value.trim()))errors.push(['email',registrationMessages.email]);
+    if(phone.length<10||phone.length>11)errors.push(['phone',registrationMessages.phone]);
+    if(!validatePassword())errors.push(['password',registrationMessages.password]);
+    const missingConsents=[cTerms,cPrivacy,cResp].filter(item=>!item.checked);
+    missingConsents.forEach(item=>item.closest('label')?.classList.add('consentInvalid'));
+    if(missingConsents.length)errors.push([null,'Leia e aceite os três consentimentos para continuar.']);
+    const first=errors.map(([key,message])=>key?showRegistrationFieldError(key,message):null).find(Boolean);
+    if(errors.length){
+        registerStatus.textContent=errors.length===1?errors[0][1]:'Revise os campos destacados antes de continuar.';
+        registerStatus.classList.add('on');
+        focusRegistrationError(first||missingConsents[0]);
+        return false;
+    }
+    return true;
+}
+
+Object.values(registrationFields).forEach(field=>field.addEventListener('input',()=>{
+    field.classList.remove('fieldInvalid');
+    document.getElementById('error-'+field.id)?.remove();
+}));
+[cTerms,cPrivacy,cResp].forEach(item=>item.addEventListener('change',()=>item.closest('label')?.classList.remove('consentInvalid')));
+
+registerUser=async function(){
+    if(!validateRegistrationForm())return;
+    registerBtn.disabled=true;
+    registerBtn.textContent='Criando conta…';
+    registerStatus.textContent='Criando sua conta com segurança…';
+    registerStatus.classList.add('on');
+    try{
+        const response=await fetch(API+'/v1/auth/register',{
+            method:'POST',
+            headers:{Accept:'application/json','Content-Type':'application/json'},
+            body:JSON.stringify({
+                name:rName.value.trim(),
+                cpf:rCpf.value.replace(/\D/g,''),
+                email:rEmail.value.trim(),
+                phone:rPhone.value.replace(/\D/g,''),
+                password:rPassword.value
+            })
+        });
+        let result={};try{result=await response.json()}catch{}
+        if(!response.ok){
+            const backendErrors=result.errors||{};
+            const aliases={cpf:'cpf',name:'name',email:'email',phone:'phone',password:'password'};
+            let first=null;
+            Object.entries(backendErrors).forEach(([key,messages])=>{
+                const fieldKey=aliases[key];
+                if(!fieldKey)return;
+                let message=Array.isArray(messages)?messages[0]:messages;
+                if(String(message).includes('validation.unique'))message='Este dado já possui cadastro. Entre na sua conta para continuar.';
+                first=first||showRegistrationFieldError(fieldKey,message);
+            });
+            registerStatus.textContent=Object.keys(backendErrors).length
+                ? 'Não foi possível concluir. Corrija os campos destacados.'
+                : (result.message||'Não foi possível concluir o cadastro. Tente novamente.');
+            registerStatus.classList.add('on');
+            focusRegistrationError(first||registerBtn);
+            return;
+        }
+        token=result.token;user=result.user;localStorage.setItem('fdb_token',token);
+        await Promise.all(['terms','privacy','responsibility'].map(type=>apiFetch('/v1/compliance/consents',{method:'POST',body:JSON.stringify({type,version:'1.0'})})));
+        registerStatus.textContent='Cadastro concluído. Agora valide sua identidade.';
+        go('kyc');
+    }catch(error){
+        registerStatus.textContent='Não foi possível conectar ao servidor. Verifique sua internet e tente novamente.';
+        registerStatus.classList.add('on');
+        focusRegistrationError(registerStatus);
+    }finally{
+        registerBtn.disabled=false;
+        registerBtn.textContent='Continuar para validação de identidade';
+    }
+};
+</script>
 </body>
 </html>
