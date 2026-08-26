@@ -1,34 +1,143 @@
-import React,{useEffect,useState}from'react';
-import{Alert,SafeAreaView,ScrollView,StyleSheet,Text,TextInput,TouchableOpacity,View}from'react-native';
-import{StatusBar}from'expo-status-bar';
-import AsyncStorage from'@react-native-async-storage/async-storage';
-import * as DocumentPicker from'expo-document-picker';
-import Svg,{Path,Rect,Circle}from'react-native-svg';
+import { StatusBar } from 'expo-status-bar';
+import React, { useCallback, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  BackHandler,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { WebView } from 'react-native-webview';
+import type { WebViewNavigation } from 'react-native-webview';
 
-type Screen='login'|'register'|'kyc'|'twofa'|'home'|'deals'|'new'|'agreement'|'wallet'|'profile';
-type Status='Em análise'|'Contraproposta'|'Aceita'|'Aguardando assinaturas'|'Ativa';
-type Deal={id:string;side:'receber'|'pagar';title:string;counterparty:string;total:number;entry:number;installments:number;installmentValue:number;status:Status;proposalVersion:number;counter?:{total:number;entry:number;installments:number;installmentValue:number};signedPdfName?:string};
-const gold='#C88A05',ink='#111',muted='#71717A',line='#E8E2D7',KEY='fio-v041-deals';
-const money=(v:number)=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-const cents=(v:string)=>Number(v.replace(/\D/g,''))/100||0;
-const maskMoney=(v:string)=>money(cents(v));
-function Mustache({size=62}:{size?:number}){return <Svg width={size} height={size*.46} viewBox="0 0 100 46"><Path d="M50 27C44 20 39 16 32 16C23 16 20 24 12 23C8 22 6 19 8 15C3 16 2 23 6 28C12 35 24 36 35 33C42 31 47 28 50 27C53 28 58 31 65 33C76 36 88 35 94 28C98 23 97 16 92 15C94 19 92 22 88 23C80 24 77 16 68 16C61 16 56 20 50 27Z" fill="#D49A13"/></Svg>}
-function Icon({name,size=23}:{name:'home'|'deals'|'wallet'|'profile'|'plus';size?:number}){return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9}>{name==='home'&&<Path d="M3 11.5 12 4l9 7.5v8.5h-6v-6H9v6H3z"/>}{name==='deals'&&<><Rect x="4" y="4" width="16" height="16" rx="2"/><Path d="M8 9h8M8 13h8M8 17h5"/></>}{name==='wallet'&&<><Path d="M4 7h14a2 2 0 0 1 2 2v9H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h12"/><Path d="M15 12h5"/></>}{name==='profile'&&<><Circle cx="12" cy="8" r="4"/><Path d="M4 21c1-5 4-7 8-7s7 2 8 7"/></>}{name==='plus'&&<Path d="M12 5v14M5 12h14"/>}</Svg>}
-function Card({children,dark=false}:{children:React.ReactNode;dark?:boolean}){return <View style={[s.card,dark&&s.dark]}>{children}</View>}
-function Button({title,onPress,secondary=false,disabled=false}:{title:string;onPress:()=>void;secondary?:boolean;disabled?:boolean}){return <TouchableOpacity disabled={disabled} onPress={onPress} style={[s.btn,secondary&&s.btn2,disabled&&{opacity:.35}]}><Text style={[s.btnText,secondary&&{color:ink}]}>{title}</Text></TouchableOpacity>}
-function Field({label,value,onChangeText,placeholder,keyboardType='default'}:{label:string;value:string;onChangeText:(v:string)=>void;placeholder:string;keyboardType?:any}){return <View><Text style={s.label}>{label}</Text><TextInput style={s.input} value={value} onChangeText={onChangeText} placeholder={placeholder} keyboardType={keyboardType}/></View>}
-function MoneyField({label,value,onChange}:{label:string;value:string;onChange:(v:string)=>void}){return <Field label={label} value={value} onChangeText={v=>onChange(maskMoney(v))} placeholder="R$ 0,00" keyboardType="numeric"/>}
-function Nav({go,current}:{go:(x:Screen)=>void;current:Screen}){return <View style={s.nav}>{(['home','deals','wallet','profile'] as const).map((n,i)=>i===2?null:<TouchableOpacity key={n} onPress={()=>go(n)} style={s.navItem}><Icon name={n}/><Text style={[s.navText,current===n&&s.navActive]}>{n==='home'?'Início':n==='deals'?'Negociações':n==='profile'?'Perfil':''}</Text></TouchableOpacity>)}<TouchableOpacity onPress={()=>go('new')} style={s.plus}><Icon name="plus" size={29}/></TouchableOpacity><TouchableOpacity onPress={()=>go('wallet')} style={s.navItem}><Icon name="wallet"/><Text style={[s.navText,current==='wallet'&&s.navActive]}>Carteira</Text></TouchableOpacity></View>}
-const seed:Deal[]=[{id:'1',side:'receber',title:'Honda CG 160 Fan 2023',counterparty:'Marcos Oliveira',total:18000,entry:3000,installments:12,installmentValue:1376,status:'Ativa',proposalVersion:1},{id:'2',side:'pagar',title:'MacBook Air M2',counterparty:'Ana Ribeiro',total:7200,entry:1200,installments:6,installmentValue:1000,status:'Em análise',proposalVersion:1}];
-function Login({go}:{go:(x:Screen)=>void}){return <ScrollView contentContainerStyle={s.auth}><View style={s.loginBrand}><Mustache size={92}/><Text style={s.brand}>FIO DO BIGODE</Text></View><Text style={s.title}>Acesso seguro</Text><TextInput style={s.input} defaultValue="joaosilva@email.com"/><TextInput style={s.input} defaultValue="123456" secureTextEntry/><Button title="Entrar" onPress={()=>go('twofa')}/><Button title="Criar minha conta" secondary onPress={()=>go('register')}/><Button title="Esqueci minha senha" secondary onPress={()=>Alert.alert('Recuperação','Token temporário por e-mail.')}/></ScrollView>}
-function Register({go}:{go:(x:Screen)=>void}){return <ScrollView contentContainerStyle={s.content}><Text style={s.kicker}>CADASTRO SEGURO</Text><Text style={s.title}>Validar identidade</Text><Field label="CPF" value="" onChangeText={()=>{}} placeholder="000.000.000-00" keyboardType="numeric"/><Field label="Nome completo" value="" onChangeText={()=>{}} placeholder="Nome completo"/><Field label="E-mail" value="" onChangeText={()=>{}} placeholder="seu@email.com"/><Field label="Celular" value="" onChangeText={()=>{}} placeholder="(31) 99999-9999"/><Card><Text style={s.bold}>KYC obrigatório</Text><Text style={s.small}>CNH/CIN → CPF → selfie 1:1 → prova de vida → Risk Score.</Text></Card><Button title="Continuar validação" onPress={()=>go('kyc')}/></ScrollView>}
-function KYC({go}:{go:(x:Screen)=>void}){return <ScrollView contentContainerStyle={s.content}><Text style={s.kicker}>KYC + ANTIFRAUDE</Text><Text style={s.title}>Você é realmente você?</Text>{['CPF e titularidade','CNH/CIN cruzada com CPF','Selfie + biometria facial','Prova de vida','Risk Score inicial: BAIXO'].map(x=><Card key={x}><Text style={s.bold}>{x}</Text><Text style={s.ok}>✓ Validação simulada</Text></Card>)}<Button title="Concluir identidade" onPress={()=>go('twofa')}/></ScrollView>}
-function TwoFA({go}:{go:(x:Screen)=>void}){return <ScrollView contentContainerStyle={s.auth}><View style={{alignItems:'center'}}><Mustache size={70}/></View><Text style={s.title}>Verificação em 2 etapas</Text><Field label="Token de 6 dígitos" value="123456" onChangeText={()=>{}} placeholder="000000" keyboardType="numeric"/><Button title="Validar token" onPress={()=>go('home')}/></ScrollView>}
-function Home({go,deals,select}:{go:(x:Screen)=>void;deals:Deal[];select:(d:Deal)=>void}){return <ScrollView contentContainerStyle={s.content}><View style={s.row}><View><Text style={s.title}>Olá, João!</Text><Text style={s.small}>Identidade verificada • Risk Score baixo</Text></View><Mustache size={45}/></View><Card><Text style={s.small}>Tenho a receber</Text><Text style={s.metric}>R$ 16.512,00</Text></Card><Card><Text style={s.small}>Tenho a pagar</Text><Text style={s.metric}>R$ 6.000,00</Text></Card><Button title="＋ Adicionar negociação" onPress={()=>go('new')}/><Text style={s.section}>Bigode Bank</Text><TouchableOpacity onPress={()=>go('wallet')}><View style={s.walletHero}><Text style={s.walletBrand}>BIGODE BANK</Text><Text style={s.walletSub}>Wallet digital</Text><Text style={s.walletValue}>R$ 2.350,00</Text><View style={s.walletActions}><Text>PIX</Text><Text>Receber</Text><Text>Pagar</Text></View></View></TouchableOpacity><Text style={s.section}>Negociações recentes</Text>{deals.map(d=><TouchableOpacity key={d.id} onPress={()=>select(d)}><Card><Text style={s.bold}>{d.title}</Text><Text style={s.small}>{d.counterparty} • {d.side==='receber'?'A receber':'A pagar'}</Text><Text style={s.badge}>{d.status}</Text></Card></TouchableOpacity>)}</ScrollView>}
-function Deals({go,deals,select}:{go:(x:Screen)=>void;deals:Deal[];select:(d:Deal)=>void}){return <ScrollView contentContainerStyle={s.content}><Text style={s.title}>Minhas negociações</Text><Button title="＋ Nova negociação" onPress={()=>go('new')}/>{deals.map(d=><TouchableOpacity key={d.id} onPress={()=>select(d)}><Card><Text style={s.bold}>{d.title}</Text><Text style={s.small}>{d.counterparty}</Text><View style={s.row}><Text style={s.metric}>{money(d.counter?.total??d.total)}</Text><Text style={s.badge}>{d.status}</Text></View></Card></TouchableOpacity>)}</ScrollView>}
-function NewDeal({save,go}:{save:(d:Deal)=>void;go:(x:Screen)=>void}){const[step,setStep]=useState(1),[title,setTitle]=useState('Honda CG 160 Fan 2023'),[total,setTotal]=useState('R$ 18.000,00'),[entry,setEntry]=useState('R$ 3.000,00'),[qty,setQty]=useState('12'),[ack,setAck]=useState(false);const totalN=cents(total),entryN=cents(entry),q=Math.max(1,Number(qty)||1),iv=(totalN-entryN)/q;const next=()=>setStep(Math.min(5,step+1));return <ScrollView contentContainerStyle={s.content}><Text style={s.kicker}>ETAPA {step} DE 5</Text>{step===1&&<><Text style={s.title}>Comprador</Text><Field label="Nome, CPF ou celular" value="Marcos Oliveira" onChangeText={()=>{}} placeholder="Comprador"/><Card><Text style={s.bold}>Marcos Oliveira</Text><Text style={s.ok}>✓ Identidade verificada • CNH</Text><Text style={s.small}>Rating 4,8 / 5</Text></Card><Button title="Selecionar comprador" onPress={next}/></>}{step===2&&<><Text style={s.title}>Categoria</Text><Card><Text style={s.bold}>Veículo / Moto</Text></Card><Card><Text style={s.bold}>Imóvel</Text></Card><Card><Text style={s.bold}>Eletrônico</Text></Card><Button title="Continuar" onPress={next}/></>}{step===3&&<><Text style={s.title}>Bem negociado</Text><Card><Text style={s.bold}>＋ Adicionar fotos do bem</Text></Card><Field label="Descrição" value={title} onChangeText={setTitle} placeholder="Bem"/><MoneyField label="Valor do bem" value={total} onChange={setTotal}/><Button title="Continuar" onPress={next}/></>}{step===4&&<><Text style={s.title}>Condições financeiras</Text><MoneyField label="Valor total da negociação" value={total} onChange={setTotal}/><MoneyField label="Valor de entrada" value={entry} onChange={setEntry}/><Field label="Quantidade de parcelas" value={qty} onChangeText={setQty} placeholder="12" keyboardType="numeric"/><Card><Text style={s.small}>Valor estimado da parcela</Text><Text style={s.metric}>{money(iv)}</Text></Card><Button title="Revisar proposta" onPress={next}/></>}{step===5&&<><Text style={s.title}>Revisar e enviar</Text><Card><Text style={s.bold}>{title}</Text><Text>Valor: {money(totalN)}</Text><Text>Entrada: {money(entryN)}</Text><Text>{q} parcelas de {money(iv)}</Text></Card><TouchableOpacity onPress={()=>setAck(!ack)} style={s.checkRow}><View style={[s.check,ack&&s.checkOn]}><Text style={{color:'#fff'}}>{ack?'✓':''}</Text></View><Text style={[s.small,{flex:1}]}>Declaro a veracidade das informações e compreendo o papel de intermediação e registro do Fio do Bigode.</Text></TouchableOpacity><Button disabled={!ack} title="Enviar proposta" onPress={()=>{save({id:String(Date.now()),side:'receber',title,counterparty:'Marcos Oliveira',total:totalN,entry:entryN,installments:q,installmentValue:iv,status:'Em análise',proposalVersion:1});go('deals')}}/></>}</ScrollView>}
-function Agreement({deal,update,go}:{deal:Deal;update:(d:Deal)=>void;go:(x:Screen)=>void}){const[ct,setCt]=useState(money(deal.total)),[ce,setCe]=useState(money(deal.entry)),[cq,setCq]=useState(String(deal.installments));const tn=cents(ct),en=cents(ce),q=Math.max(1,Number(cq)||1),iv=(tn-en)/q;const send=()=>update({...deal,status:'Contraproposta',proposalVersion:deal.proposalVersion+1,counter:{total:tn,entry:en,installments:q,installmentValue:iv}});const sellerAccept=()=>update({...deal,status:'Aceita',total:deal.counter?.total??deal.total,entry:deal.counter?.entry??deal.entry,installments:deal.counter?.installments??deal.installments,installmentValue:deal.counter?.installmentValue??deal.installmentValue});const importPdf=async()=>{const r=await DocumentPicker.getDocumentAsync({type:'application/pdf'});if(!r.canceled){update({...deal,status:'Ativa',signedPdfName:r.assets[0].name});go('deals')}};return <ScrollView contentContainerStyle={s.content}><Text style={s.title}>Acompanhamento</Text><Card><Text style={s.bold}>{deal.title}</Text><Text style={s.small}>{deal.counterparty} • proposta v{deal.proposalVersion}</Text><Text style={s.badge}>{deal.status}</Text></Card>{deal.side==='pagar'&&deal.status==='Em análise'&&<><Text style={s.section}>Fazer contraproposta</Text><MoneyField label="Valor total da contraproposta" value={ct} onChange={setCt}/><MoneyField label="Valor de entrada" value={ce} onChange={setCe}/><Field label="Quantidade de parcelas" value={cq} onChangeText={setCq} placeholder="8" keyboardType="numeric"/><Text style={s.label}>Valor estimado da parcela</Text><Text style={s.metric}>{money(iv)}</Text><Button title="Enviar contraproposta" secondary onPress={send}/></>}{deal.status==='Contraproposta'&&<><Card><Text style={s.bold}>Contraproposta aguardando vendedor</Text><Text>{money(deal.counter?.total??0)} • entrada {money(deal.counter?.entry??0)}</Text><Text>{deal.counter?.installments}x de {money(deal.counter?.installmentValue??0)}</Text></Card>{deal.side==='receber'?<Button title="Aceitar contraproposta como vendedor" onPress={sellerAccept}/>:<Text style={s.small}>Contrato bloqueado até aceite explícito do vendedor.</Text>}</>}{deal.status==='Aceita'&&<><Card><Text style={s.ok}>✓ Condições consolidadas e congeladas</Text></Card><Button title="Gerar contrato" onPress={()=>update({...deal,status:'Aguardando assinaturas'})}/></>}{deal.status==='Aguardando assinaturas'&&<Button title="Importar PDF assinado" onPress={importPdf}/>}</ScrollView>}
-function Wallet(){return <ScrollView contentContainerStyle={s.content}><Text style={s.title}>Bigode Bank</Text><View style={s.walletHero}><Text style={s.walletBrand}>BIGODE BANK</Text><Text style={s.walletSub}>Wallet digital demonstrativa</Text><Text style={s.walletValue}>R$ 2.350,00</Text><View style={s.walletActions}><Text>PIX</Text><Text>Receber</Text><Text>Pagar</Text></View></View><Text style={s.section}>Extrato</Text><Card><Text style={s.bold}>PIX recebido • Marcos</Text><Text style={s.metric}>+ R$ 1.376,00</Text></Card><Card><Text style={s.bold}>PIX enviado • Ana</Text><Text style={s.metric}>- R$ 1.000,00</Text></Card><Text style={s.small}>Nenhuma movimentação financeira real nesta versão.</Text></ScrollView>}
-function Profile(){return <ScrollView contentContainerStyle={s.content}><Text style={s.title}>Meu perfil</Text><Card><Text style={s.bold}>João Silva</Text><Text style={s.ok}>✓ Identidade verificada • CNH</Text><Text>Índice Bigode: 92 • Excelente</Text><Text>Risk Score: 18 • Baixo</Text></Card></ScrollView>}
-export default function App(){const[screen,setScreen]=useState<Screen>('login'),[deals,setDeals]=useState<Deal[]>(seed),[selected,setSelected]=useState<Deal|null>(null);useEffect(()=>{AsyncStorage.getItem(KEY).then(v=>v&&setDeals(JSON.parse(v))).catch(()=>{})},[]);const persist=(x:Deal[])=>{setDeals(x);AsyncStorage.setItem(KEY,JSON.stringify(x)).catch(()=>{})};const update=(d:Deal)=>{persist(deals.map(x=>x.id===d.id?d:x));setSelected(d)};const save=(d:Deal)=>persist([d,...deals]);const go=(x:Screen)=>setScreen(x);const select=(d:Deal)=>{setSelected(d);setScreen('agreement')};const main=['home','deals','new','agreement','wallet','profile'].includes(screen);return <SafeAreaView style={s.safe}><StatusBar style="dark"/><View style={s.body}>{screen==='login'&&<Login go={go}/>} {screen==='register'&&<Register go={go}/>} {screen==='kyc'&&<KYC go={go}/>} {screen==='twofa'&&<TwoFA go={go}/>} {screen==='home'&&<Home go={go} deals={deals} select={select}/>} {screen==='deals'&&<Deals go={go} deals={deals} select={select}/>} {screen==='new'&&<NewDeal save={save} go={go}/>} {screen==='agreement'&&selected&&<Agreement deal={selected} update={update} go={go}/>} {screen==='wallet'&&<Wallet/>} {screen==='profile'&&<Profile/>}</View>{main&&<Nav go={go} current={screen}/>}</SafeAreaView>}
-const s=StyleSheet.create({safe:{flex:1,backgroundColor:'#fff'},body:{flex:1},content:{padding:18,paddingBottom:100},auth:{padding:22,paddingBottom:50},loginBrand:{alignItems:'center',paddingVertical:28},brand:{color:gold,fontWeight:'900',letterSpacing:3,fontSize:20},title:{fontSize:27,fontWeight:'900',color:ink,marginBottom:8},small:{fontSize:12,color:muted,lineHeight:18},bold:{fontWeight:'850',fontSize:15,color:ink},ok:{color:'#23733A',fontWeight:'800',fontSize:12},card:{borderWidth:1,borderColor:line,borderRadius:16,padding:15,marginVertical:7,backgroundColor:'#fff'},dark:{backgroundColor:'#171717',borderWidth:0},btn:{backgroundColor:ink,padding:15,borderRadius:12,alignItems:'center',marginTop:10},btn2:{backgroundColor:'#fff',borderWidth:1,borderColor:'#ddd'},btnText:{color:'#fff',fontWeight:'850'},input:{borderWidth:1,borderColor:'#ddd',borderRadius:12,padding:13,fontSize:16,marginTop:6,marginBottom:8},label:{fontSize:12,fontWeight:'800',color:'#555',marginTop:8},row:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:10},metric:{fontSize:22,fontWeight:'900',color:ink,marginTop:4},section:{fontSize:18,fontWeight:'900',marginTop:20,marginBottom:5},badge:{fontSize:10,fontWeight:'800',backgroundColor:'#FFF0C6',color:'#835D00',paddingHorizontal:8,paddingVertical:5,borderRadius:20,overflow:'hidden',alignSelf:'flex-start',marginTop:8},kicker:{fontSize:11,fontWeight:'900',color:gold,letterSpacing:1},nav:{height:82,borderTopWidth:1,borderTopColor:'#eee',flexDirection:'row',justifyContent:'space-around',alignItems:'center',backgroundColor:'#fff'},navItem:{alignItems:'center',justifyContent:'center',minWidth:58,gap:2},navText:{fontSize:9,color:'#777'},navActive:{color:ink,fontWeight:'900'},plus:{width:54,height:54,borderRadius:27,backgroundColor:ink,alignItems:'center',justifyContent:'center',marginTop:-30,color:'#fff'},walletHero:{backgroundColor:'#171717',borderRadius:20,padding:20},walletBrand:{color:'#F2C65C',fontWeight:'900',letterSpacing:1},walletSub:{color:'#ccc',fontSize:11,marginTop:2},walletValue:{color:'#fff',fontSize:28,fontWeight:'900',marginTop:16},walletActions:{flexDirection:'row',justifyContent:'space-between',marginTop:18},checkRow:{flexDirection:'row',gap:10,alignItems:'center',marginVertical:12},check:{width:24,height:24,borderRadius:6,borderWidth:2,borderColor:'#bbb',alignItems:'center',justifyContent:'center'},checkOn:{backgroundColor:gold,borderColor:gold}});
+const APP_URL = 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html';
+
+export default function App() {
+  const webView = useRef<WebView>(null);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const onNavigationStateChange = useCallback((navigation: WebViewNavigation) => {
+    setCanGoBack(navigation.canGoBack);
+  }, []);
+
+  React.useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!canGoBack) return false;
+      webView.current?.goBack();
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [canGoBack]);
+
+  if (failed) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="light" />
+        <View style={styles.errorContainer}>
+          <Text style={styles.mustache}>〰</Text>
+          <Text style={styles.errorTitle}>Não foi possível abrir o Fio do Bigode</Text>
+          <Text style={styles.errorText}>
+            Verifique sua conexão com a internet e tente novamente.
+          </Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            style={styles.retryButton}
+            onPress={() => setFailed(false)}
+          >
+            <Text style={styles.retryText}>Tentar novamente</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar style="dark" />
+      <WebView
+        ref={webView}
+        source={{ uri: APP_URL }}
+        originWhitelist={['https://*']}
+        onNavigationStateChange={onNavigationStateChange}
+        onError={() => setFailed(true)}
+        onHttpError={({ nativeEvent }) => {
+          if (nativeEvent.statusCode >= 500) setFailed(true);
+        }}
+        startInLoadingState
+        renderLoading={() => (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#D99A00" />
+            <Text style={styles.loadingText}>Abrindo o Fio do Bigode…</Text>
+          </View>
+        )}
+        javaScriptEnabled
+        domStorageEnabled
+        sharedCookiesEnabled
+        thirdPartyCookiesEnabled
+        allowsBackForwardNavigationGestures
+        mediaPlaybackRequiresUserAction
+        setSupportMultipleWindows={false}
+      />
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  loadingContainer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  loadingText: {
+    color: '#52525B',
+    fontSize: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    backgroundColor: '#111111',
+  },
+  mustache: {
+    marginBottom: 18,
+    color: '#D99A00',
+    fontSize: 72,
+    fontWeight: '900',
+  },
+  errorTitle: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  errorText: {
+    marginTop: 12,
+    color: '#D4D4D8',
+    fontSize: 16,
+    lineHeight: 23,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 28,
+    paddingHorizontal: 30,
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: '#D99A00',
+  },
+  retryText: {
+    color: '#111111',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+});
