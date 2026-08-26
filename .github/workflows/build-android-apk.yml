@@ -41,14 +41,14 @@ jobs:
       - name: Gerar projeto Android
         run: npx expo prebuild --platform android --non-interactive
 
-      - name: Compilar APK de homologação
-        run: ./gradlew assembleDebug
+      - name: Compilar APK independente de homologação
+        run: ./gradlew assembleRelease
         working-directory: mobile/android
 
       - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
         with:
-          name: fio-do-bigode-v0.5.0-apk
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          name: fio-do-bigode-v0.5.1-apk
+          path: mobile/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
