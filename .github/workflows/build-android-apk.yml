@@ -2,6 +2,10 @@ name: Gerar APK Android
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/build-android-apk.yml'
   push:
     branches:
       - feat/first-integrated-apk
