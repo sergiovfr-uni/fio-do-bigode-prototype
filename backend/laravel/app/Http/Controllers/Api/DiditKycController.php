@@ -69,6 +69,26 @@ class DiditKycController extends Controller
     public function status(Request $request)
     {
         $session = DB::table('didit_kyc_sessions')->where('user_id',$request->user()->id)->latest()->first();
+        if ($session && !in_array($session->status, ['Approved','Declined','Expired','Abandoned','Kyc Expired'], true)) {
+            $response = Http::timeout(20)
+                ->withHeaders(['x-api-key'=>config('didit.api_key')])
+                ->acceptJson()
+                ->get(rtrim(config('didit.api_url'), '/').'/v3/session/'.$session->session_id.'/decision/');
+
+            if ($response->successful()) {
+                $this->applyDecision($session, $response->json(), 'status-check-'.now()->timestamp);
+                $session = DB::table('didit_kyc_sessions')->where('id',$session->id)->first();
+                $request->user()->refresh();
+            } else {
+                Log::warning('Didit recusou a consulta da sessão KYC.', [
+                    'user_id'=>$request->user()->id,
+                    'session_id'=>$session->session_id,
+                    'status'=>$response->status(),
+                    'response'=>$response->json() ?? $response->body(),
+                ]);
+            }
+        }
+
         return response()->json([
             'kyc_status'=>$request->user()->kyc_status,
             'session'=>$session ? [
@@ -85,17 +105,27 @@ class DiditKycController extends Controller
         $payload = $request->json()->all();
         $timestamp = (string) $request->header('X-Timestamp', '');
         $signature = (string) $request->header('X-Signature-V2', '');
+        $simpleSignature = (string) $request->header('X-Signature-Simple', '');
         abort_unless($timestamp !== '' && ctype_digit($timestamp) && abs(time()-(int)$timestamp) <= 300, 401, 'Webhook expirado.');
-        abort_unless($signature !== '' && config('didit.webhook_secret'), 401, 'Assinatura ausente.');
+        abort_unless(($signature !== '' || $simpleSignature !== '') && config('didit.webhook_secret'), 401, 'Assinatura ausente.');
 
         $canonical = json_encode($this->canonicalize($payload), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
         $expected = hash_hmac('sha256', $canonical, config('didit.webhook_secret'));
-        abort_unless(hash_equals($expected, $signature), 401, 'Assinatura inválida.');
+        $simpleCanonical = implode(':', [
+            $payload['timestamp'] ?? '',
+            $payload['session_id'] ?? '',
+            $payload['status'] ?? '',
+            $payload['webhook_type'] ?? '',
+        ]);
+        $simpleExpected = hash_hmac('sha256', $simpleCanonical, config('didit.webhook_secret'));
+        $verified = ($signature !== '' && hash_equals($expected, $signature))
+            || ($simpleSignature !== '' && hash_equals($simpleExpected, $simpleSignature));
+        abort_unless($verified, 401, 'Assinatura inválida.');
 
-        $eventId = $payload['event_id'] ?? null;
         $eventType = $payload['webhook_type'] ?? '';
         $sessionId = $payload['session_id'] ?? null;
-        abort_unless($eventId && $eventType, 422, 'Evento inválido.');
+        abort_unless($sessionId && $eventType, 422, 'Evento inválido.');
+        $eventId = $payload['event_id'] ?? hash('sha256', implode('|', [$sessionId,$eventType,$payload['timestamp'] ?? $timestamp]));
 
         $inserted = DB::table('didit_webhook_events')->insertOrIgnore([
             'event_id'=>$eventId,
@@ -110,43 +140,48 @@ class DiditKycController extends Controller
         if (in_array($eventType, ['status.updated','data.updated'], true) && $sessionId) {
             $session = DB::table('didit_kyc_sessions')->where('session_id',$sessionId)->first();
             if ($session) {
-                $status = (string) ($payload['status'] ?? 'In Progress');
-                $userStatus = match ($status) {
-                    'Approved' => 'verified',
-                    'Declined' => 'rejected',
-                    'In Review' => 'review',
-                    'Expired', 'Kyc Expired' => 'expired',
-                    default => 'pending',
-                };
-                DB::transaction(function () use ($payload,$eventId,$session,$status,$userStatus): void {
-                    DB::table('didit_kyc_sessions')->where('id',$session->id)->update([
-                        'status'=>$status,
-                        'decision'=>isset($payload['decision']) ? json_encode($payload['decision'], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) : $session->decision,
-                        'completed_at'=>in_array($status,['Approved','Declined','Expired','Abandoned','Kyc Expired'],true) ? now() : null,
-                        'updated_at'=>now(),
-                    ]);
-                    DB::table('users')->where('id',$session->user_id)->update([
-                        'kyc_status'=>$userStatus,
-                        'risk_score'=>$status === 'Approved' ? 0 : ($status === 'Declined' ? 100 : 50),
-                        'updated_at'=>now(),
-                    ]);
-                    DB::table('kyc_checks')->insert([
-                        'user_id'=>$session->user_id,
-                        'provider'=>'didit',
-                        'check_type'=>'full',
-                        'status'=>$userStatus,
-                        'external_id'=>$session->session_id,
-                        'result'=>json_encode(['event_id'=>$eventId,'didit_status'=>$status], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
-                        'verified_at'=>$status === 'Approved' ? now() : null,
-                        'created_at'=>now(),
-                        'updated_at'=>now(),
-                    ]);
-                    DB::table('didit_webhook_events')->where('event_id',$eventId)->update(['processed_at'=>now(),'updated_at'=>now()]);
-                });
+                $this->applyDecision($session, $payload, $eventId);
             }
         }
 
         return response()->json(['received'=>true]);
+    }
+
+    private function applyDecision(object $session, array $payload, string $eventId): void
+    {
+        $status = (string) ($payload['status'] ?? 'In Progress');
+        $userStatus = match ($status) {
+            'Approved' => 'verified',
+            'Declined' => 'rejected',
+            'In Review' => 'review',
+            'Expired', 'Kyc Expired' => 'expired',
+            default => 'pending',
+        };
+
+        DB::transaction(function () use ($payload,$eventId,$session,$status,$userStatus): void {
+            DB::table('didit_kyc_sessions')->where('id',$session->id)->update([
+                'status'=>$status,
+                'decision'=>json_encode($payload['decision'] ?? $payload, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
+                'completed_at'=>in_array($status,['Approved','Declined','Expired','Abandoned','Kyc Expired'],true) ? now() : null,
+                'updated_at'=>now(),
+            ]);
+            DB::table('users')->where('id',$session->user_id)->update([
+                'kyc_status'=>$userStatus,
+                'risk_score'=>$status === 'Approved' ? 0 : ($status === 'Declined' ? 100 : 50),
+                'updated_at'=>now(),
+            ]);
+            DB::table('kyc_checks')->updateOrInsert(
+                ['user_id'=>$session->user_id,'provider'=>'didit','check_type'=>'full','external_id'=>$session->session_id],
+                [
+                    'status'=>$userStatus,
+                    'result'=>json_encode(['event_id'=>$eventId,'didit_status'=>$status], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
+                    'verified_at'=>$status === 'Approved' ? now() : null,
+                    'created_at'=>now(),
+                    'updated_at'=>now(),
+                ]
+            );
+            DB::table('didit_webhook_events')->where('event_id',$eventId)->update(['processed_at'=>now(),'updated_at'=>now()]);
+        });
     }
 
     private function canonicalize(mixed $value): mixed
