@@ -2,7 +2,7 @@
 
 Aplicativo Android/iOS em React Native + Expo.
 
-## Primeira build integrada (v0.5.0)
+## Primeira build integrada (v0.5.1)
 
 - Usa a jornada web homologada dentro de um contêiner nativo.
 - Login, cadastro, KYC Didit, negociações e pagamentos usam o backend real.
