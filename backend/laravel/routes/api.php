@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\ElectronicSignatureController;
 use App\Http\Controllers\Api\DealController;
 use App\Http\Controllers\Api\DealDocumentController;
 use App\Http\Controllers\Api\DealInvitationController;
+use App\Http\Controllers\Api\DealRatingController;
 use App\Http\Controllers\Api\DiditKycController;
 use App\Http\Controllers\Api\DealWitnessController;
 use App\Http\Controllers\Api\InstallmentController;
@@ -78,6 +79,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/deals/{deal}/electronic-signature/code', [ElectronicSignatureController::class, 'requestCode'])->middleware('throttle:5,1');
         Route::post('/deals/{deal}/electronic-signature/sign', [ElectronicSignatureController::class, 'sign'])->middleware('throttle:10,1');
         Route::get('/deals/{deal}/documents', [DealDocumentController::class, 'index']);
+        Route::get('/deals/{deal}/ratings', [DealRatingController::class, 'index']);
+        Route::post('/deals/{deal}/ratings', [DealRatingController::class, 'store']);
         Route::get('/deals/{deal}/documents/{document}/download', [DealDocumentController::class, 'download']);
         Route::post('/deals/{deal}/documents', [DealDocumentController::class, 'store']);
         Route::post('/deals/{deal}/signed-document', [DealDocumentController::class, 'storeSignedBase64']);

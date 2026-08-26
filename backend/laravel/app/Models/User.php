@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -15,7 +16,7 @@ class User extends Authenticatable
     protected $hidden = ['password','remember_token','cpf'];
     protected $casts = ['email_verified_at'=>'datetime','birth_date'=>'date:Y-m-d','deletion_requested_at'=>'datetime','risk_score'=>'integer','reputation_score'=>'integer'];
 
-    protected $appends = ['contract_qualification_complete'];
+    protected $appends = ['contract_qualification_complete', 'reputation_reviews_count'];
 
     public function hasContractQualification(): bool
     {
@@ -28,6 +29,11 @@ class User extends Authenticatable
     public function getContractQualificationCompleteAttribute(): bool
     {
         return $this->hasContractQualification();
+    }
+
+    public function getReputationReviewsCountAttribute(): int
+    {
+        return (int) DB::table('deal_ratings')->where('rated_user_id', $this->id)->count();
     }
 
     public function subscriptions(){ return $this->hasMany(Subscription::class); }

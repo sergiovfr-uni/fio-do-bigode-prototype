@@ -130,7 +130,8 @@ class InstallmentController extends Controller
         if (!$deal->installments()->where('status', '!=', 'paid')->exists()) {
             $deal->update(['status'=>'paid_off','paid_off_at'=>now()]);
             $events->record($deal, $request->user()->id, 'deal_paid_off');
-            $events->notify($deal, $deal->buyer_id, 'deal_paid_off', 'Negociação quitada', 'Todas as parcelas foram confirmadas. A negociação está quitada.', ['deal_id'=>$deal->id]);
+            $events->notify($deal, $deal->buyer_id, 'deal_paid_off', 'Negociação quitada — avalie a outra parte', 'Todas as parcelas foram confirmadas. Faça sua avaliação em bigodinhos para concluir o termo de quitação.', ['deal_id'=>$deal->id]);
+            $events->notify($deal, $deal->seller_id, 'deal_rating_required', 'Avalie o comprador', 'A negociação foi quitada. Faça sua avaliação em bigodinhos para concluir o termo de quitação.', ['deal_id'=>$deal->id]);
         }
 
         return response()->json($installment->fresh());
