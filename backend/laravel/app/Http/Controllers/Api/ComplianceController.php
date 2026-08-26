@@ -30,6 +30,7 @@ class ComplianceController extends Controller
 
     public function submitKyc(Request $request)
     {
+        abort_unless(app()->environment('testing'), 404);
         $data = $request->validate([
             'provider'=>['required','string','max:40'],
             'check_type'=>['required','in:cpf,document,face,liveness,full'],

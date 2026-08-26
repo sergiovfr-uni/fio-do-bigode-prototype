@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\ElectronicSignatureController;
 use App\Http\Controllers\Api\DealController;
 use App\Http\Controllers\Api\DealDocumentController;
 use App\Http\Controllers\Api\DealInvitationController;
+use App\Http\Controllers\Api\DiditKycController;
 use App\Http\Controllers\Api\DealWitnessController;
 use App\Http\Controllers\Api\InstallmentController;
 use App\Http\Controllers\Api\ListingController;
@@ -28,6 +29,7 @@ Route::get('/health', function () {
 });
 
 Route::prefix('v1')->group(function () {
+    Route::post('/kyc/didit/webhook', [DiditKycController::class, 'webhook'])->middleware('throttle:120,1');
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::post('/auth/2fa/verify', [AuthController::class, 'verifyTwoFactor']);
@@ -53,6 +55,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/compliance/consents', [ComplianceController::class, 'consents']);
         Route::post('/compliance/consents', [ComplianceController::class, 'acceptConsent']);
         Route::post('/compliance/kyc', [ComplianceController::class, 'submitKyc']);
+        Route::post('/kyc/didit/start', [DiditKycController::class, 'start'])->middleware('throttle:10,1');
+        Route::get('/kyc/didit/status', [DiditKycController::class, 'status']);
         Route::post('/compliance/account-deletion', [ComplianceController::class, 'requestAccountDeletion']);
         Route::get('/deal-invitations', [DealInvitationController::class, 'index']);
         Route::post('/deal-invitations', [DealInvitationController::class, 'store']);
