@@ -743,5 +743,86 @@ async function downloadHistoryDocument(documentId) {
     }
 }
 </script>
+<script>
+const kycLabels={
+    verified:'Identidade verificada',
+    rejected:'Identidade reprovada',
+    review:'Identidade em análise',
+    pending:'Validação pendente',
+    expired:'Validação expirada'
+};
+
+function kycLabel(status){return kycLabels[status]||'Validação pendente'}
+
+function openKycFromAccount(){
+    go('kyc');
+    refreshDiditKyc();
+}
+
+function renderKycAccess(){
+    if(!user)return;
+    const status=user.kyc_status||'pending';
+    const verified=status==='verified';
+    const review=status==='review';
+    homeIdentity.textContent=kycLabel(status)+' • Bigode '+(user.reputation_score||0)+'/100';
+    const badge=profileCard.querySelector('.badge');
+    if(badge){badge.textContent=kycLabel(status);badge.classList.toggle('ok',verified)}
+
+    let homeBox=document.getElementById('homeKycAccess');
+    if(!homeBox){homeBox=document.createElement('div');homeBox.id='homeKycAccess';homeIdentity.insertAdjacentElement('afterend',homeBox)}
+    let profileBox=document.getElementById('profileKycAccess');
+    if(!profileBox){profileBox=document.createElement('div');profileBox.id='profileKycAccess';profileCard.insertAdjacentElement('afterend',profileBox)}
+
+    if(verified){homeBox.innerHTML='';profileBox.innerHTML='';return}
+    const message=review
+        ? '<div class="notice"><b>Identidade em análise</b><div class="muted">Aguarde a conclusão da Didit. Avisaremos assim que houver uma decisão.</div></div>'
+        : '<div class="notice"><b>'+kycLabel(status)+'</b><div class="muted">Conclua a validação para publicar anúncios e participar de negociações.</div></div><button class="btn gold" onclick="openKycFromAccount()">Validar identidade agora</button>';
+    homeBox.innerHTML=message;
+    profileBox.innerHTML=message;
+}
+
+function requireVerifiedKyc(){
+    if(user?.kyc_status==='verified')return true;
+    openKycFromAccount();
+    kycStatus.textContent=user?.kyc_status==='review'
+        ? 'Sua identidade ainda está em análise. Aguarde a decisão para continuar.'
+        : 'Conclua a validação de identidade antes de realizar esta ação.';
+    return false;
+}
+
+const loadMeBeforeKycUx=loadMe;
+loadMe=async function(){const result=await loadMeBeforeKycUx();renderKycAccess();return result};
+
+const sheetGoBeforeKycUx=sheetGo;
+sheetGo=function(id){if(['newDeal','newListing'].includes(id)&&!requireVerifiedKyc()){closeSheet();return}sheetGoBeforeKycUx(id)};
+
+const createListingBeforeKycUx=createListing;
+createListing=async function(){if(!requireVerifiedKyc())return;return createListingBeforeKycUx()};
+const generateInviteBeforeKycUx=generateInvite;
+generateInvite=async function(){if(!requireVerifiedKyc())return;return generateInviteBeforeKycUx()};
+const submitProposalBeforeKycUx=submitProposal;
+submitProposal=async function(){if(!requireVerifiedKyc())return;return submitProposalBeforeKycUx()};
+const acceptInviteBeforeKycUx=acceptInvite;
+acceptInvite=async function(){if(!requireVerifiedKyc())return;return acceptInviteBeforeKycUx()};
+
+const apiFetchBeforeFriendlyErrors=apiFetch;
+apiFetch=async function(path,opt={}){
+    try{return await apiFetchBeforeFriendlyErrors(path,opt)}catch(error){
+        if(String(error.message).includes('validation.unique')){
+            throw new Error('Este CPF, e-mail ou telefone já possui cadastro. Entre na sua conta para continuar.');
+        }
+        throw error;
+    }
+};
+
+const refreshDiditKycBeforeUx=refreshDiditKyc;
+refreshDiditKyc=async function(){
+    await refreshDiditKycBeforeUx();
+    if(token){try{user=await apiFetch('/v1/me')}catch{}}
+    if(user)renderKycAccess();
+    const status=user?.kyc_status;
+    startKycBtn.classList.toggle('hidden',status==='verified'||status==='review');
+};
+</script>
 </body>
 </html>
