@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class DiditKycController extends Controller
 {
@@ -32,11 +33,19 @@ class DiditKycController extends Controller
                 'workflow_id'=>config('didit.workflow_id'),
                 'vendor_data'=>(string) $user->id,
                 'callback'=>config('didit.callback_url'),
-                'language'=>'pt-BR',
+                'language'=>'pt',
                 'metadata'=>['source'=>'fio-do-bigode','user_id'=>(string) $user->id],
             ]);
 
-        abort_unless($response->successful(), 502, 'Não foi possível iniciar a validação de identidade.');
+        if (!$response->successful()) {
+            Log::warning('Didit recusou a criação da sessão KYC.', [
+                'user_id' => $user->id,
+                'status' => $response->status(),
+                'response' => $response->json() ?? $response->body(),
+            ]);
+
+            abort(502, 'A Didit recusou a criação da sessão (HTTP '.$response->status().').');
+        }
         $payload = $response->json();
         $sessionId = $payload['session_id'] ?? $payload['id'] ?? null;
         $url = $payload['url'] ?? $payload['session_url'] ?? null;
