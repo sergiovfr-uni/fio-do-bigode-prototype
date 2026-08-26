@@ -962,5 +962,78 @@ registerUser=async function(){
     }
 };
 </script>
+<style>
+.closingRating{margin-top:12px;padding:15px;border:1px solid #eed89b;border-radius:18px;background:#fffaf0}
+.ratingChoice{display:flex;justify-content:space-between;gap:5px;margin:14px 0}
+.ratingChoice button{width:52px;height:46px;border:1px solid #d8c58b;border-radius:12px;background:#fff;color:#aaa;padding:5px}
+.ratingChoice button.on{background:#111;color:var(--g);border-color:#111;transform:scale(1.06)}
+.ratingChoice svg{width:38px;height:20px;fill:currentColor}
+.downloadHint{font-size:11px;color:#555;margin-top:7px}
+</style>
+<script>
+let selectedDealRating=0;
+const ratingMustachePath='M50 27C44 20 39 16 32 16C23 16 20 24 12 23C8 22 6 19 8 15C3 16 2 23 6 28C12 35 24 36 35 33C42 31 47 28 50 27C53 28 58 31 65 33C76 36 88 35 94 28C98 23 97 16 92 15C94 19 92 22 88 23C80 24 77 16 68 16C61 16 56 20 50 27Z';
+
+function nativeDownload(blob, fileName){
+    const reader=new FileReader();
+    reader.onload=()=>{
+        if(window.ReactNativeWebView){
+            window.ReactNativeWebView.postMessage(JSON.stringify({type:'download',fileName:fileName||'documento',dataUrl:reader.result}));
+            dealActionStatus.textContent='Abrindo opções para salvar ou compartilhar…';
+            return;
+        }
+        const anchor=document.createElement('a');anchor.href=reader.result;anchor.download=fileName||'documento';document.body.appendChild(anchor);anchor.click();anchor.remove();
+    };
+    reader.readAsDataURL(blob);
+}
+
+async function fetchAuthenticatedDownload(path,fileName){
+    const response=await fetch(API+path,{headers:{Authorization:'Bearer '+token}});
+    if(!response.ok){let message='Não foi possível baixar o arquivo.';try{const body=await response.json();message=body.message||message}catch{}throw new Error(message)}
+    const disposition=response.headers.get('content-disposition')||'';
+    const match=disposition.match(/filename[^;=]*=(?:UTF-8''|["']?)([^"';]+)/i);
+    nativeDownload(await response.blob(),match?decodeURIComponent(match[1]):fileName);
+}
+
+downloadInstallmentReceipt=async function(id){try{await fetchAuthenticatedDownload('/v1/deals/'+activeDeal.id+'/installments/'+id+'/receipt','comprovante-parcela-'+id)}catch(error){dealActionStatus.textContent=error.message}};
+downloadHistoryDocument=async function(documentId){try{await fetchAuthenticatedDownload('/v1/deals/'+activeDeal.id+'/documents/'+documentId+'/download','documento-negociacao-'+documentId+'.pdf')}catch(error){dealActionStatus.textContent=error.message}};
+downloadEntryReceipt=async function(){try{await fetchAuthenticatedDownload('/v1/deals/'+activeDeal.id+'/entry-receipt/download','comprovante-entrada')}catch(error){dealActionStatus.textContent=error.message}};
+
+paymentTrackingHtml=function(deal){
+    const seller=Number(user.id)===Number(deal.seller_id);
+    const rows=(deal.payment_schedule||[]).map(installment=>{
+        let actions='';
+        if(installment.status==='paid')actions='<div class="installmentActions">'+(installment.receipt_document_id?'<button class="btn ghost" onclick="downloadInstallmentReceipt('+installment.id+')">Baixar comprovante</button>':'')+'<span class="badge ok">Paga</span></div>';
+        else if(seller&&installment.receipt_document_id)actions='<div class="installmentActions"><button class="btn ghost" onclick="downloadInstallmentReceipt('+installment.id+')">Ver comprovante</button><button class="btn" onclick="markInstallmentPaid('+installment.id+')">Confirmar recebimento</button></div>';
+        else if(seller)actions='<span class="badge">Aguardando comprovante</span>';
+        else if(installment.receipt_document_id||installment.status==='receipt_submitted')actions='<span class="badge blue">Comprovante enviado</span>';
+        else actions='<button class="btn gold" style="width:auto" onclick="openInstallmentPayment('+installment.id+')">Adiantar/pagar parcela</button>';
+        return '<div class="card" id="installmentRow'+installment.id+'"><div class="row"><span><b>'+installment.number+'ª parcela</b><br>'+formatInstallmentDate(installment.due_date)+installmentDueLabel(installment.due_date)+'<b>'+brl(installment.amount)+'</b></span>'+actions+'</div><div class="installmentForm hidden" id="installmentForm'+installment.id+'"></div></div>';
+    }).join('');
+    return '<div class="card"><h3>'+(deal.status==='paid_off'?'Negociação quitada':'Acompanhamento das parcelas')+'</h3><div class="muted">Os vencimentos seguem mensalmente a partir da primeira data acordada.</div>'+(rows||'<div class="muted">Parcelas ainda não disponíveis.</div>')+'</div>';
+};
+
+function chooseDealRating(value){selectedDealRating=value;document.querySelectorAll('#dealRatingChoice button').forEach((button,index)=>button.classList.toggle('on',index<value));document.getElementById('submitDealRating').disabled=false}
+function ratingChoiceHtml(){return '<div class="ratingChoice" id="dealRatingChoice">'+[1,2,3,4,5].map(value=>'<button type="button" onclick="chooseDealRating('+value+')" aria-label="'+value+' bigodinhos"><svg viewBox="0 0 100 46"><path d="'+ratingMustachePath+'"/></svg></button>').join('')+'</div>'}
+async function loadDealRating(dealId){
+    if(!activeDeal||activeDeal.status!=='paid_off')return;
+    try{
+        const result=await apiFetch('/v1/deals/'+dealId+'/ratings');
+        document.getElementById('dealClosingRating')?.remove();
+        const other=Number(user.id)===Number(activeDeal.seller_id)?activeDeal.buyer:activeDeal.seller;
+        const content=result.my_rating
+            ? '<div class="verify">Sua avaliação: '+result.my_rating.rating+' de 5 bigodinhos ✓</div><div class="muted">'+(result.complete?'As duas partes avaliaram. O termo de quitação está disponível no histórico documental.':'Aguardando a avaliação da outra parte para gerar o termo de quitação.')+'</div>'
+            : '<b>Avalie '+safe(other?.name||'a outra parte')+'</b><div class="muted">A avaliação encerra a jornada e compõe a reputação no Fio do Bigode.</div>'+ratingChoiceHtml()+'<textarea id="dealRatingComment" class="input" rows="2" maxlength="500" placeholder="Comentário opcional"></textarea><button id="submitDealRating" class="btn gold" disabled onclick="submitDealRating()">Enviar avaliação</button>';
+        dealDetailBody.insertAdjacentHTML('beforeend','<div class="closingRating" id="dealClosingRating"><h3>Fechamento da negociação</h3>'+content+'</div>');
+    }catch(error){dealActionStatus.textContent='Não foi possível carregar a avaliação.'}
+}
+async function submitDealRating(){
+    if(!selectedDealRating)return;
+    const button=document.getElementById('submitDealRating');button.disabled=true;button.textContent='Enviando…';
+    try{const result=await apiFetch('/v1/deals/'+activeDeal.id+'/ratings',{method:'POST',body:JSON.stringify({rating:selectedDealRating,comment:document.getElementById('dealRatingComment')?.value.trim()||null})});dealActionStatus.textContent=result.message;selectedDealRating=0;await loadMe();await loadDealRating(activeDeal.id);await loadDealDocumentHistory(activeDeal.id)}catch(error){dealActionStatus.textContent=error.message;button.disabled=false;button.textContent='Enviar avaliação'}
+}
+const openDealDetailBeforeClosingRating=openDealDetail;
+openDealDetail=function(id){openDealDetailBeforeClosingRating(id);setTimeout(()=>loadDealRating(id),0)};
+</script>
 </body>
 </html>

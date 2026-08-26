@@ -1,4 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,6 +13,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { WebViewNavigation } from 'react-native-webview';
+import type { WebViewMessageEvent } from 'react-native-webview';
 
 const APP_URL = 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html';
 
@@ -21,6 +24,21 @@ export default function App() {
 
   const onNavigationStateChange = useCallback((navigation: WebViewNavigation) => {
     setCanGoBack(navigation.canGoBack);
+  }, []);
+
+  const onMessage = useCallback(async (event: WebViewMessageEvent) => {
+    try {
+      const message = JSON.parse(event.nativeEvent.data);
+      if (message.type !== 'download' || !message.dataUrl) return;
+      const match = String(message.dataUrl).match(/^data:([^;]+);base64,(.+)$/s);
+      if (!match) throw new Error('Arquivo recebido em formato inválido.');
+      const safeName = String(message.fileName || 'documento').replace(/[^a-zA-Z0-9._-]/g, '-');
+      const uri = FileSystem.cacheDirectory + safeName;
+      await FileSystem.writeAsStringAsync(uri, match[2], { encoding: FileSystem.EncodingType.Base64 });
+      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: match[1], dialogTitle: 'Salvar ou compartilhar arquivo' });
+    } catch {
+      webView.current?.injectJavaScript("document.getElementById('dealActionStatus').textContent='Não foi possível preparar o arquivo no aparelho.';true;");
+    }
   }, []);
 
   React.useEffect(() => {
@@ -63,6 +81,7 @@ export default function App() {
         source={{ uri: APP_URL }}
         originWhitelist={['https://*']}
         onNavigationStateChange={onNavigationStateChange}
+        onMessage={onMessage}
         onError={() => setFailed(true)}
         onHttpError={({ nativeEvent }) => {
           if (nativeEvent.statusCode >= 500) setFailed(true);
