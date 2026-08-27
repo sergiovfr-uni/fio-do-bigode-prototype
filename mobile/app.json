@@ -2,18 +2,28 @@
   "expo": {
     "name": "Fio do Bigode",
     "slug": "fio-do-bigode-mobile",
-    "version": "0.5.2",
+    "version": "0.5.3",
+    "icon": "./assets/icon.png",
     "scheme": "fiodobigode",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#111111"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.fiodobigode.app",
-      "buildNumber": "11"
+      "buildNumber": "12"
     },
     "android": {
       "package": "com.fiodobigode.app",
-      "versionCode": 11,
+      "versionCode": 12,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon-foreground.png",
+        "backgroundColor": "#111111"
+      },
       "permissions": [
         "CAMERA"
       ]
