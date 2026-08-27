@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\AdminAuthController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\ComplianceController;
@@ -30,6 +31,8 @@ Route::get('/health', function () {
 });
 
 Route::prefix('v1')->group(function () {
+    Route::post('/admin/auth/login', [AdminAuthController::class, 'login'])->middleware('throttle:5,1');
+    Route::post('/admin/auth/2fa/verify', [AdminAuthController::class, 'verifyTwoFactor'])->middleware('throttle:10,1');
     Route::post('/kyc/didit/webhook', [DiditKycController::class, 'webhook'])->middleware('throttle:120,1');
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/login', [AuthController::class, 'login']);
@@ -92,7 +95,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/deals/{deal}/installments/{installment}/receipt', [InstallmentController::class, 'downloadReceipt']);
         Route::post('/deals/{deal}/installments/{installment}/paid', [InstallmentController::class, 'markPaid']);
         Route::get('/wallet', [WalletController::class, 'show']);
-        Route::prefix('admin')->group(function () {
+        Route::prefix('admin')->middleware('admin')->group(function () {
+            Route::get('/auth/me', [AdminAuthController::class, 'me']);
+            Route::post('/auth/logout', [AdminAuthController::class, 'logout']);
             Route::get('/dashboard', [AdminController::class, 'dashboard']);
             Route::get('/users', [AdminController::class, 'users']);
             Route::get('/deals', [AdminController::class, 'deals']);
