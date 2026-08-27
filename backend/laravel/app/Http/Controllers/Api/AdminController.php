@@ -2,6 +2,7 @@
 namespace App\Http\Controllers\Api;
 use App\Models\Deal;
 use App\Models\Listing;
+use App\Models\Plan;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -13,4 +14,5 @@ class AdminController {
  public function wallets(Request $r){return DB::table('wallet_accounts')->join('users','users.id','=','wallet_accounts.user_id')->leftJoin('wallet_transactions','wallet_transactions.wallet_account_id','=','wallet_accounts.id')->groupBy('wallet_accounts.id','users.name','users.email','wallet_accounts.available_balance')->selectRaw('wallet_accounts.id, users.name, users.email, wallet_accounts.available_balance as balance, COUNT(wallet_transactions.id) transactions')->orderByDesc('wallet_accounts.id')->paginate(30);}
  public function installments(Request $r){return DB::table('installments')->join('deals','deals.id','=','installments.deal_id')->orderBy('due_date')->select('installments.*','deals.public_id as deal_public_id')->paginate(50);}
  public function campaigns(Request $r){return DB::table('campaigns')->join('advertisers','advertisers.id','=','campaigns.advertiser_id')->leftJoin('ad_events','ad_events.campaign_id','=','campaigns.id')->groupBy('campaigns.id','advertisers.name','campaigns.name','campaigns.headline','campaigns.active','campaigns.starts_at','campaigns.ends_at')->selectRaw("campaigns.id, advertisers.name advertiser, campaigns.name, campaigns.headline, campaigns.active, campaigns.starts_at, campaigns.ends_at, SUM(CASE WHEN ad_events.type='impression' THEN 1 ELSE 0 END) impressions, SUM(CASE WHEN ad_events.type='click' THEN 1 ELSE 0 END) clicks")->latest('campaigns.id')->paginate(30);}
+ public function plans(Request $r){return Plan::withCount(['subscriptions as subscribers_count'=>fn($q)=>$q->whereIn('status',['trial','active']),'subscriptions as trials_count'=>fn($q)=>$q->where('status','trial')])->orderBy('monthly_price')->get();}
 }
