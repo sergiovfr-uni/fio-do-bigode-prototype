@@ -35,10 +35,12 @@ O protótipo não é fonte de verdade. No MVP integrado, toda informação opera
 
 O painel usa rotas próprias em `/api/v1/admin`, protegidas por Sanctum, middleware de administrador e 2FA por e-mail.
 
-Para promover uma conta existente no deploy do Railway, configure:
+Para promover uma conta existente ou criar uma conta administrativa dedicada no deploy do Railway, configure:
 
 ```env
 ADMIN_EMAIL=email-da-conta-existente
+ADMIN_PASSWORD=senha-temporaria-forte
+ADMIN_NAME=Administração Fio do Bigode
 ```
 
-O `AdminUserSeeder` é executado na inicialização do container. Ele apenas promove a conta correspondente; não cria senha padrão e não altera as credenciais do usuário.
+O `AdminUserSeeder` é executado na inicialização do container. Se a conta já existir, apenas concede o papel administrativo e preserva sua senha. Se não existir, cria uma conta interna sem KYC, reputação ou participação nas negociações. Nenhuma senha padrão fica gravada no código.
