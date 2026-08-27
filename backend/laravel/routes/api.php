@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\ComplianceController;
 use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\ElectronicSignatureController;
 use App\Http\Controllers\Api\DealController;
+use App\Http\Controllers\Api\DelinquencyController;
 use App\Http\Controllers\Api\DealDocumentController;
 use App\Http\Controllers\Api\DealInvitationController;
 use App\Http\Controllers\Api\DealRatingController;
@@ -98,6 +99,11 @@ Route::prefix('v1')->group(function () {
         Route::post('/deals/{deal}/installments/{installment}/receipt', [InstallmentController::class, 'storeReceipt']);
         Route::get('/deals/{deal}/installments/{installment}/receipt', [InstallmentController::class, 'downloadReceipt']);
         Route::post('/deals/{deal}/installments/{installment}/paid', [InstallmentController::class, 'markPaid']);
+        Route::get('/deals/{deal}/installments/{installment}/delinquency', [DelinquencyController::class, 'index']);
+        Route::post('/deals/{deal}/installments/{installment}/delinquency/reschedule', [DelinquencyController::class, 'requestReschedule']);
+        Route::post('/deals/{deal}/installments/{installment}/delinquency/reschedule/{action}/respond', [DelinquencyController::class, 'respondReschedule']);
+        Route::post('/deals/{deal}/installments/{installment}/delinquency/formal-notice', [DelinquencyController::class, 'issueFormalNotice']);
+        Route::post('/deals/{deal}/installments/{installment}/delinquency/legal-support', [DelinquencyController::class, 'requestLegalSupport']);
         Route::get('/wallet', [WalletController::class, 'show']);
         Route::prefix('admin')->middleware('admin')->group(function () {
             Route::get('/auth/me', [AdminAuthController::class, 'me']);

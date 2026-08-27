@@ -132,6 +132,8 @@ class InstallmentController extends Controller
             $events->record($deal, $request->user()->id, 'deal_paid_off');
             $events->notify($deal, $deal->buyer_id, 'deal_paid_off', 'Negociação quitada — avalie a outra parte', 'Todas as parcelas foram confirmadas. Faça sua avaliação em bigodinhos para concluir o termo de quitação.', ['deal_id'=>$deal->id]);
             $events->notify($deal, $deal->seller_id, 'deal_rating_required', 'Avalie o comprador', 'A negociação foi quitada. Faça sua avaliação em bigodinhos para concluir o termo de quitação.', ['deal_id'=>$deal->id]);
+        } elseif ($deal->status === 'overdue' && !$deal->installments()->whereIn('status', ['pending', 'receipt_submitted'])->whereDate('due_date', '<', today())->exists()) {
+            $deal->update(['status'=>'active']);
         }
 
         return response()->json($installment->fresh());
