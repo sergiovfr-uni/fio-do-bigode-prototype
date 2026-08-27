@@ -14,7 +14,7 @@ class User extends Authenticatable
 
     protected $fillable = ['name','cpf','identity_document','birth_date','marital_status','occupation','nationality','email','phone','address_line','address_number','address_complement','district','city','state','postal_code','password','kyc_status','risk_score','reputation_score','account_status','deletion_requested_at'];
     protected $hidden = ['password','remember_token','cpf'];
-    protected $casts = ['email_verified_at'=>'datetime','birth_date'=>'date:Y-m-d','deletion_requested_at'=>'datetime','risk_score'=>'integer','reputation_score'=>'integer'];
+    protected $casts = ['email_verified_at'=>'datetime','birth_date'=>'date:Y-m-d','deletion_requested_at'=>'datetime','risk_score'=>'integer','reputation_score'=>'integer','is_admin'=>'boolean'];
 
     protected $appends = ['contract_qualification_complete', 'reputation_reviews_count'];
 
