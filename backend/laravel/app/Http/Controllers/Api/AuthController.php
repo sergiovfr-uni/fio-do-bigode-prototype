@@ -186,6 +186,7 @@ class AuthController extends Controller
 
         $users = User::query()
             ->whereNotIn('email', $demoEmails)
+            ->where('is_admin', false)
             ->where('account_status', 'active')
             ->where('id', '!=', $request->user()->id)
             ->where(function ($builder) use ($query, $digits, $normalizedPhoneSql) {
