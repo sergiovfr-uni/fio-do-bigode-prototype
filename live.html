@@ -143,7 +143,7 @@ if(token){setTimeout(async()=>{await loadMe().catch(()=>{});await loadNotificati
 let fdbDealView='progress';
 const fdbPaymentStatuses=['entry_receipt_pending','entry_confirmation_pending','active','overdue','paid_off'];
 function fdbDealRole(d){return Number(d.seller_id)===Number(user.id)?'Venda':'Compra'}
-function fdbBusinessStatus(d){if(d.status==='proposal_sent')return Number(d.buyer_id)===Number(user.id)?'Pendente do seu aceite':'Aguardando aceite';return d.status==='paid_off'?'Quitada':fdbPaymentStatuses.includes(d.status)?'Em pagamento':dealStatusLabel(d.status)}
+function fdbBusinessStatus(d){if(d.status==='proposal_sent')return Number(d.buyer_id)===Number(user.id)?'Pendente do seu aceite':'Aguardando aceite';if(d.status==='overdue')return'Em atraso';return d.status==='paid_off'?'Quitada':fdbPaymentStatuses.includes(d.status)?'Em pagamento':dealStatusLabel(d.status)}
 function fdbDealCard(d){
     const role=fdbDealRole(d),other=role==='Venda'?d.buyer:d.seller,schedule=d.payment_schedule||[],paid=schedule.filter(i=>i.status==='paid').length;
     const businessStatus=fdbBusinessStatus(d);
@@ -1064,7 +1064,7 @@ openDealDetail=function(id){openDealDetailBeforeClosingRating(id);setTimeout(()=
 <script>
 let myListings=[];
 let listingView='browse';
-let homeCategory='Todos';
+let homeCategory='';
 let classifiedCategory='Todos';
 let editingListingId=null;
 let openingListingEditor=false;
@@ -1076,11 +1076,12 @@ function normalizeManagedListing(item){
 const renderListingsBeforeManagement=renderListings;
 renderListings=function(){
     const categories=['Todos',...new Set(listings.map(item=>item.category).filter(Boolean))];
-    if(!categories.includes(homeCategory))homeCategory='Todos';
+    if(homeCategory&&!categories.includes(homeCategory))homeCategory='';
     if(!categories.includes(classifiedCategory))classifiedCategory='Todos';
-    homeCategories.innerHTML=categories.map(category=>'<button class="categoryChip '+(category===homeCategory?'on':'')+'" onclick="setHomeCategory(decodeURIComponent(\''+encodeURIComponent(category)+'\'))">'+safe(category)+'</button>').join('');
-    const homeItems=listings.filter(item=>homeCategory==='Todos'||item.category===homeCategory).sort((a,b)=>Number(b.sponsored)-Number(a.sponsored)).slice(0,4);
-    homeListings.innerHTML=homeItems.length?homeItems.map(item=>listingHtml(item,true)).join(''):'<div class="card">Nenhum anúncio nesta categoria.</div>';
+    const homeCategoryOptions=categories.filter(category=>category!=='Todos');
+    homeCategories.innerHTML=homeCategoryOptions.map(category=>'<button class="categoryChip '+(category===homeCategory?'on':'')+'" onclick="setHomeCategory(decodeURIComponent(\''+encodeURIComponent(category)+'\'))">'+safe(category)+'</button>').join('');
+    const homeItems=homeCategory?listings.filter(item=>item.category===homeCategory).sort((a,b)=>Number(b.sponsored)-Number(a.sponsored)).slice(0,4):[];
+    homeListings.innerHTML=!homeCategory?'<div class="card muted">Escolha uma categoria para ver os anúncios.</div>':homeItems.length?homeItems.map(item=>listingHtml(item,true)).join(''):'<div class="card">Nenhum anúncio nesta categoria.</div>';
 
     if(listingView==='mine'){
         classifiedCategories.innerHTML='';
