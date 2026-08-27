@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AdminAuthController;
 use App\Http\Controllers\Api\AdminOperationsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CampaignController;
+use App\Http\Controllers\Api\CommunityPartnerController;
 use App\Http\Controllers\Api\ComplianceController;
 use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\ElectronicSignatureController;
@@ -43,6 +44,7 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
     Route::get('/deal-invitations/{code}', [DealInvitationController::class, 'show']);
     Route::get('/campaigns/home', [CampaignController::class, 'home']);
+    Route::get('/community-partners', [CommunityPartnerController::class, 'index']);
     Route::post('/campaigns/{campaign}/impression', [CampaignController::class, 'impression']);
     Route::post('/campaigns/{campaign}/click', [CampaignController::class, 'click']);
     Route::get('/listings', [ListingController::class, 'index']);
@@ -138,6 +140,10 @@ Route::prefix('v1')->group(function () {
             Route::post('/wallets/{wallet}/adjust', [AdminOperationsController::class, 'adjustWallet']);
             Route::post('/wallets/{wallet}/status', [AdminOperationsController::class, 'changeWalletStatus']);
             Route::get('/advertisers', [AdminOperationsController::class, 'advertisers']);
+            Route::get('/community-partners', [AdminOperationsController::class, 'communityPartners']);
+            Route::post('/community-partners', [AdminOperationsController::class, 'createCommunityPartner']);
+            Route::put('/community-partners/{partner}', [AdminOperationsController::class, 'updateCommunityPartner']);
+            Route::post('/community-partners/{partner}/status', [AdminOperationsController::class, 'changeCommunityPartnerStatus']);
             Route::post('/advertisers', [AdminOperationsController::class, 'createAdvertiser']);
             Route::put('/advertisers/{advertiser}', [AdminOperationsController::class, 'updateAdvertiser']);
             Route::post('/advertisers/{advertiser}/status', [AdminOperationsController::class, 'changeAdvertiserStatus']);

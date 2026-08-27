@@ -332,6 +332,42 @@ class AdminOperationsController extends Controller
         return DB::table('advertisers')->orderBy('name')->get();
     }
 
+    public function communityPartners()
+    {
+        return DB::table('community_partners')->orderBy('priority')->orderBy('name')->get();
+    }
+
+    public function createCommunityPartner(Request $request)
+    {
+        $data = $this->validateCommunityPartner($request);
+        $id = DB::table('community_partners')->insertGetId([...$data, 'created_at'=>now(), 'updated_at'=>now()]);
+        $partner = (array) DB::table('community_partners')->find($id);
+        $this->audit($request, 'community_partner.created', 'community_partner', $id, null, $partner);
+        return response()->json($partner, 201);
+    }
+
+    public function updateCommunityPartner(Request $request, int $partner)
+    {
+        $before = DB::table('community_partners')->find($partner);
+        abort_unless($before, 404);
+        $data = $this->validateCommunityPartner($request, true);
+        DB::table('community_partners')->where('id', $partner)->update([...$data, 'updated_at'=>now()]);
+        $after = DB::table('community_partners')->find($partner);
+        $this->audit($request, 'community_partner.updated', 'community_partner', $partner, (array) $before, (array) $after);
+        return response()->json($after);
+    }
+
+    public function changeCommunityPartnerStatus(Request $request, int $partner)
+    {
+        $before = DB::table('community_partners')->find($partner);
+        abort_unless($before, 404);
+        $data = $request->validate(['active'=>['required','boolean'], 'reason'=>['required','string','min:5','max:500']]);
+        DB::table('community_partners')->where('id', $partner)->update(['active'=>$data['active'], 'updated_at'=>now()]);
+        $after = DB::table('community_partners')->find($partner);
+        $this->audit($request, 'community_partner.status_changed', 'community_partner', $partner, (array) $before, (array) $after, $data['reason']);
+        return response()->json($after);
+    }
+
     public function createAdvertiser(Request $request)
     {
         $data = $request->validate(['name'=>['required','string','max:160'],'document'=>['nullable','string','max:30'],'contact_email'=>['nullable','email','max:255'],'active'=>['sometimes','boolean']]);
@@ -451,6 +487,30 @@ class AdminOperationsController extends Controller
         ]);
         if (!empty($data['media_path'])) abort_unless((bool)preg_match('#^data:image/(jpeg|png|webp);base64,#',$data['media_path']) || str_starts_with($data['media_path'],'https://'), 422, 'A mídia deve ser uma imagem JPG, PNG ou WebP, ou uma URL HTTPS.');
         if (!empty($data['target_url'])) abort_unless(str_starts_with($data['target_url'],'https://'), 422, 'O link da campanha deve usar HTTPS.');
+        if ($updating) unset($data['active']);
+        return $data;
+    }
+
+    private function validateCommunityPartner(Request $request, bool $updating = false): array
+    {
+        $data = $request->validate([
+            'name'=>['required','string','max:160'],
+            'platform'=>['required', Rule::in(['instagram','facebook','whatsapp','youtube','tiktok','other'])],
+            'profile_url'=>['required','url','max:1000'],
+            'avatar_url'=>['nullable','string','max:900000'],
+            'audience_label'=>['nullable','string','max:160'],
+            'description'=>['nullable','string','max:1000'],
+            'priority'=>['required','integer','min:0','max:10000'],
+            'active'=>['sometimes','boolean'],
+        ]);
+        abort_unless(str_starts_with($data['profile_url'], 'https://'), 422, 'O perfil do parceiro deve usar HTTPS.');
+        if (!empty($data['avatar_url'])) {
+            abort_unless(
+                (bool) preg_match('#^data:image/(jpeg|png|webp);base64,#', $data['avatar_url']) || str_starts_with($data['avatar_url'], 'https://'),
+                422,
+                'A imagem do parceiro deve ser JPG, PNG ou WebP, ou uma URL HTTPS.'
+            );
+        }
         if ($updating) unset($data['active']);
         return $data;
     }
