@@ -67,6 +67,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/deal-invitations', [DealInvitationController::class, 'store']);
         Route::post('/deal-invitations/{code}/accept', [DealInvitationController::class, 'accept']);
         Route::post('/listings', [ListingController::class, 'store']);
+        Route::get('/me/listings', [ListingController::class, 'mine']);
+        Route::put('/listings/{listing}', [ListingController::class, 'update']);
+        Route::post('/listings/{listing}/status', [ListingController::class, 'changeStatus']);
         Route::post('/listings/{listing}/proposals', [DealController::class, 'fromListing']);
         Route::get('/deals', [DealController::class, 'index']);
         Route::post('/deals', [DealController::class, 'store']);
