@@ -28,7 +28,7 @@ class DealController extends Controller
                 'buyer:id,name,kyc_status,reputation_score,risk_score',
                 'offers',
                 'witnesses',
-                'paymentSchedule',
+                'paymentSchedule.delinquencyActions.actor:id,name',
             ])
             ->where(fn ($query) => $query
                 ->where('seller_id', $user->id)
