@@ -8,9 +8,10 @@
 <section id="kyc" class="screen"><span class="step">VALIDAÇÃO DE IDENTIDADE</span><div class="title">Confirme que é você</div><div class="card"><b>1. RG, CIN ou CNH</b><p class="muted">Tenha o documento físico, original e legível em mãos.</p></div><div class="card"><b>2. Selfie e prova de vida</b><p class="muted">A câmera será usada para comparar seu rosto com o documento.</p></div><div class="card"><b>3. Análise antifraude</b><p class="muted">O resultado será recebido de forma segura pelo Fio do Bigode.</p></div><div class="notice"><b>Ambiente de homologação</b><div class="muted">Neste primeiro teste, a Didit simulará a análise sem validar uma identidade real.</div></div><button id="startKycBtn" class="btn" onclick="completeKyc()">Iniciar validação de identidade</button><button class="btn ghost" onclick="refreshDiditKyc()">Consultar andamento</button><div id="kycStatus" class="muted"></div></section>
 <section id="invite" class="screen"><span class="step">CONVITE DE NEGOCIAÇÃO</span><div class="title">Você foi convidado</div><div id="inviteCard" class="card">Carregando convite...</div><button id="acceptInviteBtn" class="btn" onclick="acceptInvite()">Entrar nesta negociação</button><button class="btn ghost" onclick="go('home')">Agora não</button><div id="inviteStatus" class="muted"></div></section>
 <section id="witnessInvite" class="screen"><span class="step">CONVITE DE TESTEMUNHA</span><div class="title">Dossiê da negociação</div><div id="witnessInviteCard" class="card">Carregando convite...</div><button id="witnessDownloadBtn" class="btn" onclick="downloadWitnessDossier()">Baixar dossiê</button><div class="notice"><b>Assinatura externa</b><div class="muted">Leia o documento e siga a orientação das partes para assinatura via Gov.br ou certificado ICP-Brasil. Seu acesso é limitado a este dossiê.</div></div><div id="witnessInviteStatus" class="muted"></div></section>
-<section id="home" class="screen"><div><div class="title" id="hello">Olá!</div><div class="muted" id="homeIdentity">Sessão autenticada</div></div><div id="homeReputation"></div><div id="homeDealAlert"></div><div id="notificationArea"></div><div class="section">Parceiros Fio do Bigode</div><div id="campaignArea"><div class="card"><span class="muted">Carregando campanha...</span></div></div><div class="section">Classificados recentes</div><div id="homeListings"></div></section>
+<section id="home" class="screen"><div class="homeHead"><div><div class="title" id="hello">Olá!</div><div class="muted" id="homeIdentity">Sessão autenticada</div></div><button class="bellButton" type="button" onclick="openNotificationCenter()" aria-label="Abrir notificações">🔔<span id="notificationBellCount" class="bellCount hidden">0</span></button></div><div id="homeReputation"></div><div id="homeDealAlert"></div><div id="notificationArea"></div><div class="section">Explore por categoria</div><div id="homeCategories" class="categoryScroller"></div><div id="homeListings"></div><div class="section">Parceiros Fio do Bigode</div><div id="campaignArea"><div class="card"><span class="muted">Carregando campanha...</span></div></div></section>
 <section id="deals" class="screen"><div class="title">Negociações</div><div class="muted">Escolha como deseja visualizar.</div><div class="row" style="margin:16px 0"><button id="dealMineBtn" class="btn gold" style="margin:0" onclick="showDealView('done')">Negócio feito</button><button id="dealProgressBtn" class="btn ghost" style="margin:0" onclick="showDealView('progress')">Em andamento</button></div><div id="dealArea"><div class="card">Carregando negociações...</div></div></section>
-<section id="classifieds" class="screen"><div class="row"><div><div class="title">Classificados</div><div class="muted">Um anúncio pode virar uma negociação</div></div><span class="badge">LIVE</span></div><div id="listingGrid"><div class="card">Carregando anúncios...</div></div></section>
+<section id="classifieds" class="screen"><div class="row"><div><div class="title">Classificados</div><div class="muted">Um anúncio pode virar uma negociação</div></div><span class="badge">LIVE</span></div><div class="segmented"><button id="listingBrowseBtn" class="on" onclick="showListingView('browse')">Classificados</button><button id="listingMineBtn" onclick="showListingView('mine')">Meus anúncios</button></div><div id="classifiedCategories" class="categoryScroller"></div><div id="listingGrid"><div class="card">Carregando anúncios...</div></div></section>
+<section id="notificationsCenter" class="screen"><div class="row"><div><div class="title">Notificações</div><div class="muted">Suas pendências e atualizações em um só lugar</div></div><button class="iconClose" onclick="go('home')" aria-label="Fechar">✕</button></div><button class="btn ghost" onclick="markAllNotificationsRead()">Marcar todas como lidas</button><div id="notificationList"><div class="card">Carregando notificações...</div></div></section>
 <section id="listingDetail" class="screen"><button class="btn ghost" onclick="go('classifieds')">← Voltar aos classificados</button><div id="listingDetailBody"></div></section>
 <section id="proposal" class="screen"><div class="title">Fazer proposta</div><div id="proposalListing" class="card"></div><div class="label">Valor total da proposta</div><input id="pTotal" class="input" inputmode="decimal"><div class="label">Valor de entrada</div><input id="pEntry" class="input" inputmode="decimal" value="R$ 0,00"><div class="label">Quantidade de parcelas</div><input id="pQty" class="input" inputmode="numeric" value="12"><div class="label">Juros ao mês</div><input id="pInterest" class="input" inputmode="decimal" value="0,00%"><div class="label">Primeiro vencimento</div><input id="pFirstDue" class="input" type="date"><div class="proposalSummary"><div class="muted">Valor financiado</div><div class="metric" id="pFinanced">R$ 0,00</div><div class="muted" style="margin-top:8px">Parcela estimada</div><b id="pInstallment">R$ 0,00</b></div><button class="btn" onclick="submitProposal()">Enviar proposta</button><button class="btn ghost" onclick="go('classifieds')">Cancelar</button><div id="proposalStatus" class="muted"></div></section>
 <section id="dealDetail" class="screen"><button class="btn ghost" onclick="go('deals')">← Voltar às negociações</button><div id="dealDetailBody"></div><div id="dealActionStatus" class="muted"></div></section>
@@ -1034,6 +1035,126 @@ async function submitDealRating(){
 }
 const openDealDetailBeforeClosingRating=openDealDetail;
 openDealDetail=function(id){openDealDetailBeforeClosingRating(id);setTimeout(()=>loadDealRating(id),0)};
+</script>
+<style>
+.homeHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.bellButton{position:relative;width:48px;height:48px;border:1px solid var(--line);border-radius:50%;background:#fff;font-size:21px;flex:0 0 auto}
+.bellCount{position:absolute;right:-3px;top:-4px;min-width:21px;height:21px;padding:0 5px;border-radius:20px;background:#b42318;color:#fff;border:2px solid #fff;font-size:10px;font-weight:900;display:grid;place-items:center}
+.iconClose{width:42px;height:42px;border:1px solid var(--line);border-radius:50%;background:#fff;font-weight:900}
+.segmented{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;margin:16px 0 10px;border-radius:15px;background:#f1eee8}
+.segmented button{border:0;border-radius:11px;padding:12px 8px;background:transparent;font-weight:850;color:#777}
+.segmented button.on{background:#111;color:var(--g2);box-shadow:0 2px 8px #0002}
+.categoryScroller{display:flex;gap:8px;overflow-x:auto;padding:3px 0 10px;scrollbar-width:none}
+.categoryScroller::-webkit-scrollbar{display:none}
+.categoryChip{white-space:nowrap;border:1px solid var(--line);border-radius:30px;background:#fff;padding:10px 14px;font-size:12px;font-weight:800}
+.categoryChip.on{background:#111;color:var(--g2);border-color:#111}
+.notificationItem{position:relative;padding-left:19px}
+.notificationItem.unread:before{content:'';position:absolute;left:7px;top:19px;width:7px;height:7px;border-radius:50%;background:var(--g)}
+.notificationMeta{font-size:10px;color:#888;margin-top:7px}
+.myListingActions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:12px}
+.myListingActions .btn{margin:0;padding:12px 8px;white-space:normal;line-height:1.2}
+.myListingActions .danger{grid-column:1/-1;background:#fff;color:#b42318;border:1px solid #efc1bd}
+#dealDetail [id^="installmentRow"]>.row{display:grid;grid-template-columns:1fr;align-items:stretch}
+#dealDetail .installmentActions{width:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px;align-items:stretch;margin-top:10px}
+#dealDetail .installmentActions .btn{width:100%;min-width:0;margin:0;white-space:normal;line-height:1.2}
+#dealDetail .installmentActions .badge{display:flex;align-items:center;justify-content:center;min-height:38px}
+@media(max-width:360px){.myListingActions{grid-template-columns:1fr}.documentHistoryItem{flex-direction:column;align-items:stretch}.documentHistoryItem .btn{width:100%}}
+</style>
+<script>
+let myListings=[];
+let listingView='browse';
+let homeCategory='Todos';
+let classifiedCategory='Todos';
+let editingListingId=null;
+let openingListingEditor=false;
+
+function normalizeManagedListing(item){
+    return {dbid:item.id,title:item.title,category:item.category,description:item.description,coverImage:item.cover_image||'',price:Number(item.price),seller:item.seller?.name||user?.name||'Usuário',sellerId:item.seller_id,reputation:item.seller?.reputation_score||user?.reputation_score||0,sponsored:Boolean(item.sponsored||item.featured),acceptsTrade:Boolean(item.accepts_trade),status:item.status};
+}
+
+const renderListingsBeforeManagement=renderListings;
+renderListings=function(){
+    const categories=['Todos',...new Set(listings.map(item=>item.category).filter(Boolean))];
+    if(!categories.includes(homeCategory))homeCategory='Todos';
+    if(!categories.includes(classifiedCategory))classifiedCategory='Todos';
+    homeCategories.innerHTML=categories.map(category=>'<button class="categoryChip '+(category===homeCategory?'on':'')+'" onclick="setHomeCategory(decodeURIComponent(\''+encodeURIComponent(category)+'\'))">'+safe(category)+'</button>').join('');
+    const homeItems=listings.filter(item=>homeCategory==='Todos'||item.category===homeCategory).sort((a,b)=>Number(b.sponsored)-Number(a.sponsored)).slice(0,4);
+    homeListings.innerHTML=homeItems.length?homeItems.map(item=>listingHtml(item,true)).join(''):'<div class="card">Nenhum anúncio nesta categoria.</div>';
+
+    if(listingView==='mine'){
+        classifiedCategories.innerHTML='';
+        listingGrid.innerHTML=myListings.length?myListings.map(myListingHtml).join(''):'<div class="card"><b>Você ainda não possui anúncios ativos ou pausados.</b><p class="muted">Crie seu primeiro anúncio pelo botão central do Bigode.</p></div>';
+        return;
+    }
+    classifiedCategories.innerHTML=categories.map(category=>'<button class="categoryChip '+(category===classifiedCategory?'on':'')+'" onclick="setClassifiedCategory(decodeURIComponent(\''+encodeURIComponent(category)+'\'))">'+safe(category)+'</button>').join('');
+    const publicItems=listings.filter(item=>classifiedCategory==='Todos'||item.category===classifiedCategory);
+    listingGrid.innerHTML=publicItems.length?publicItems.map(item=>listingHtml(item)).join(''):'<div class="card">Nenhum anúncio nesta categoria.</div>';
+};
+
+const loadListingsBeforeManagement=loadListings;
+loadListings=async function(){
+    await loadListingsBeforeManagement();
+    if(token){
+        try{const result=await apiFetch('/v1/me/listings');myListings=(result.data||[]).map(normalizeManagedListing)}catch{myListings=[]}
+    }
+    renderListings();
+};
+
+function setHomeCategory(category){homeCategory=category;renderListings()}
+function setClassifiedCategory(category){classifiedCategory=category;renderListings()}
+function showListingView(view){listingView=view;listingBrowseBtn.classList.toggle('on',view==='browse');listingMineBtn.classList.toggle('on',view==='mine');renderListings()}
+
+function myListingHtml(item){
+    const paused=item.status==='paused';
+    return '<div class="card listing"><div class="cover" '+(item.coverImage?'style="background-image:url(\''+item.coverImage+'\')"':'')+'>'+(item.coverImage?'':safe(item.category))+'</div><div class="body"><div class="row"><span class="badge '+(paused?'blue':'ok')+'">'+(paused?'Pausado':'Publicado')+'</span><span class="muted">'+safe(item.category)+'</span></div><b style="display:block;margin-top:9px">'+safe(item.title)+'</b><div class="price">'+brl(item.price)+'</div><div class="myListingActions"><button class="btn ghost" onclick="editOwnListing('+item.dbid+')">Editar</button><button class="btn '+(paused?'gold':'ghost')+'" onclick="changeOwnListingStatus('+item.dbid+',\''+(paused?'publish':'pause')+'\')">'+(paused?'Publicar':'Pausar')+'</button><button class="btn danger" onclick="changeOwnListingStatus('+item.dbid+',\'archive\')">Excluir</button></div></div></div>';
+}
+
+function resetListingFormForCreate(){
+    editingListingId=null;listingCoverImage='';listingFormTitleText('Novo anúncio');publishListingBtn.textContent='Publicar anúncio';
+    lCategory.value='Veículo';lTitle.value='';lDescription.value='';lPrice.value='R$ 0,00';lAcceptsTrade.checked=false;lPhoto.value='';lPhotoPreview.src='';lPhotoPreview.style.display='none';listingStatus.textContent='';
+}
+function listingFormTitleText(value){const title=document.querySelector('#newListing .title');if(title)title.textContent=value}
+function editOwnListing(id){
+    const item=myListings.find(listing=>Number(listing.dbid)===Number(id));if(!item)return;
+    editingListingId=id;openingListingEditor=true;lCategory.value=item.category;lTitle.value=item.title;lDescription.value=item.description;lPrice.value=brl(item.price);lAcceptsTrade.checked=item.acceptsTrade;listingCoverImage='';lPhoto.value='';lPhotoPreview.src=item.coverImage;lPhotoPreview.style.display=item.coverImage?'block':'none';listingFormTitleText('Editar anúncio');publishListingBtn.textContent='Salvar alterações';listingStatus.textContent='';go('newListing');openingListingEditor=false;
+}
+
+const goBeforeListingManagement=go;
+go=function(id){if(id==='newListing'&&!openingListingEditor)resetListingFormForCreate();goBeforeListingManagement(id)};
+
+createListing=async function(){
+    if(!editingListingId&&!listingCoverImage){listingStatus.textContent='Adicione ao menos uma foto antes de publicar.';return}
+    const body={category:lCategory.value,title:lTitle.value.trim(),description:lDescription.value.trim(),price:cleanMoney(lPrice.value),accepts_trade:lAcceptsTrade.checked};
+    if(listingCoverImage)body.cover_image=listingCoverImage;
+    publishListingBtn.disabled=true;publishListingBtn.textContent=editingListingId?'Salvando…':'Publicando…';
+    try{
+        await apiFetch(editingListingId?'/v1/listings/'+editingListingId:'/v1/listings',{method:editingListingId?'PUT':'POST',body:JSON.stringify(body)});
+        listingStatus.textContent=editingListingId?'Anúncio atualizado.':'Anúncio publicado.';await loadListings();editingListingId=null;setTimeout(()=>{showListingView('mine');go('classifieds')},350);
+    }catch(error){listingStatus.textContent=error.message;publishListingBtn.disabled=false;publishListingBtn.textContent=editingListingId?'Salvar alterações':'Publicar anúncio'}
+};
+
+async function changeOwnListingStatus(id,action){
+    const prompt=action==='archive'?'Excluir este anúncio? Ele será retirado dos classificados e preservado apenas no histórico.':action==='pause'?'Pausar este anúncio?':'Publicar este anúncio novamente?';
+    if(!confirm(prompt))return;
+    try{const result=await apiFetch('/v1/listings/'+id+'/status',{method:'POST',body:JSON.stringify({action})});await loadListings();showListingView('mine');if(result.message)alert(result.message)}catch(error){alert(error.message)}
+}
+
+function renderNotificationCenter(){
+    const unread=notifications.filter(item=>!item.read_at).length;
+    notificationBellCount.textContent=unread>99?'99+':unread;notificationBellCount.classList.toggle('hidden',unread===0);
+    notificationArea.innerHTML=unread?'<div class="notice clickable" onclick="openNotificationCenter()"><b>'+unread+' pendência(s) aguardando você</b><div class="muted">Toque para abrir sua central de notificações.</div></div>':'';
+    notificationList.innerHTML=notifications.length?notifications.map(item=>'<div class="card notificationItem '+(item.read_at?'':'unread')+' clickable" onclick="openNotification('+item.id+')"><b>'+safe(item.title)+'</b><div class="muted">'+safe(item.message)+'</div><div class="notificationMeta">'+new Date(item.created_at).toLocaleString('pt-BR')+(item.read_at?' • Lida':' • Não lida')+'</div></div>').join(''):'<div class="card"><b>Tudo em dia.</b><p class="muted">Quando houver propostas, documentos, pagamentos ou vencimentos, eles aparecerão aqui.</p></div>';
+}
+
+const loadNotificationsBeforeCenter=loadNotifications;
+loadNotifications=async function(){await loadNotificationsBeforeCenter();renderNotificationCenter()};
+async function openNotificationCenter(){await loadNotifications();go('notificationsCenter')}
+async function markAllNotificationsRead(){try{await apiFetch('/v1/notifications/read-all',{method:'POST',body:'{}'});await loadNotifications()}catch(error){alert(error.message)}}
+
+const openNotificationBeforeCenter=openNotification;
+openNotification=async function(id){await openNotificationBeforeCenter(id);await loadNotifications().catch(()=>{})};
+const enterAppBeforeNotificationCenter=enterApp;
+enterApp=async function(){await enterAppBeforeNotificationCenter();await loadNotifications();clearInterval(notificationTimer);notificationTimer=setInterval(loadNotifications,15000)};
 </script>
 </body>
 </html>
