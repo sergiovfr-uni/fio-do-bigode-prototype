@@ -1,14 +1,17 @@
 # Fio do Bigode Admin
 
-Protótipo navegável do painel administrativo do ecossistema Fio do Bigode.
+Painel administrativo conectado à API real do Fio do Bigode.
 
-## Versão
-Admin Prototype v0.1
+## Segurança
 
-## Áreas
-Dashboard, usuários, negociações e dossiê, documentos, financeiro, Bigode Bank/BaaS, reputação, publicidade, planos, integrações e auditoria.
+- conta marcada como administradora no backend;
+- senha e código 2FA enviado por e-mail;
+- token Sanctum exclusivo do painel;
+- token mantido somente durante a sessão da aba;
+- nenhuma credencial ou token manual é armazenado no código.
 
-## Execução local
-Abra `admin/index.html` em um navegador.
+## Áreas disponíveis nesta fase
 
-Este protótipo usa dados demonstrativos e não representa integrações financeiras, consultas de crédito ou validações reais.
+Dashboard, usuários e KYC, negociações, classificados, parcelas, wallets e campanhas em modo de consulta.
+
+O painel não possui fallback demonstrativo: se a API estiver indisponível, apresenta o erro sem substituir dados reais por dados fictícios.
