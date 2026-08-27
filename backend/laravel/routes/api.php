@@ -105,6 +105,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/wallets', [AdminController::class, 'wallets']);
             Route::get('/installments', [AdminController::class, 'installments']);
             Route::get('/campaigns', [AdminController::class, 'campaigns']);
+            Route::get('/plans', [AdminController::class, 'plans']);
         });
     });
 });
