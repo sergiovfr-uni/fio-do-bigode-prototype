@@ -30,3 +30,15 @@ Centralizar dados e regras para que App Mobile e Admin Web consumam a mesma API.
 ## Princípio central
 
 O protótipo não é fonte de verdade. No MVP integrado, toda informação operacional relevante deve existir no backend e ser apresentada de forma consistente no App e no Admin.
+
+## Acesso administrativo
+
+O painel usa rotas próprias em `/api/v1/admin`, protegidas por Sanctum, middleware de administrador e 2FA por e-mail.
+
+Para promover uma conta existente no deploy do Railway, configure:
+
+```env
+ADMIN_EMAIL=email-da-conta-existente
+```
+
+O `AdminUserSeeder` é executado na inicialização do container. Ele apenas promove a conta correspondente; não cria senha padrão e não altera as credenciais do usuário.
