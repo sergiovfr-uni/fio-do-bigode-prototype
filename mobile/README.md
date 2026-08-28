@@ -1,43 +1,61 @@
 # Fio do Bigode Mobile — v0.6.1
 
-Aplicativo Android/iOS em React Native + Expo. Nesta fase do MVP o app usa um contêiner nativo (`react-native-webview`) para executar a jornada homologada em `live.html`, integrada à API real.
-
-## Baseline v0.6.1
-
-- Login, cadastro, recuperação de senha e 2FA por e-mail.
-- KYC integrado à jornada Didit (`/v1/kyc/didit/*`).
-- Classificados, anúncios patrocinados e propostas.
-- Negociação direta, contraproposta, aceite e testemunhas opcionais.
-- Assinatura eletrônica interna por código de e-mail + consentimento + assinatura desenhada.
-- Entrada, comprovantes, parcelas, inadimplência e quitação.
-- Compartilhamento/download de documentos pelo contêiner nativo.
-- Ícone, adaptive icon e splash oficiais.
+Aplicativo Android/iOS baseado em React Native + Expo, usando um shell nativo para carregar a jornada web consolidada do MVP.
 
 ## Arquitetura atual
 
-`Expo/React Native -> WebView -> live.html -> https://api.nofiodobigode.app.br/api/v1`
+- React Native + Expo.
+- `react-native-webview` como shell da jornada do MVP.
+- API real do Fio do Bigode.
+- Download/compartilhamento nativo para documentos recebidos pela WebView.
+- URL da jornada configurável por `EXPO_PUBLIC_APP_URL`.
+- Fallback atual: GitHub Pages do repositório.
 
-A WebView é uma decisão de MVP/homologação. Funcionalidades que exigirem integração nativa mais profunda (push, biometria, deep links avançados e publicação madura nas lojas) devem migrar gradualmente para componentes React Native sem alterar os contratos da API.
+## Estabilização v0.6.1
 
-A URL da jornada pode ser sobrescrita no build com `EXPO_PUBLIC_APP_URL`. Sem essa variável, o fallback homologado continua sendo o GitHub Pages.
+Após o E2E completo aprovado em 28/08/2026, o shell recebeu uma camada temporária de compatibilidade para três ajustes de UX identificados durante a homologação:
 
-## Executar localmente
+- centralização dos modais de confirmação em telas móveis;
+- assinatura desenhada exibida somente após o preenchimento do código de seis dígitos;
+- fechamento automático do formulário de dados contratuais após salvamento bem-sucedido.
+
+A camada existe para preservar a jornada já homologada enquanto o `live.html` monolítico é limpo de forma incremental. A regra é não substituir ou remover agressivamente trechos do `live.html` antes de nova validação E2E.
+
+## Rodar localmente
 
 ```bash
-cd mobile
 npm ci
 npm run typecheck
 npx expo start
 ```
 
-## Gerar APK de homologação
-
-O workflow oficial é `.github/workflows/build-android-apk.yml`. Ele executa instalação reproduzível, validação TypeScript, `expo prebuild` limpo e `assembleRelease`.
-
-Também é possível usar EAS:
+Para apontar a WebView para outro ambiente:
 
 ```bash
-npx eas-cli build --platform android --profile preview
+EXPO_PUBLIC_APP_URL=https://seu-endereco/live.html npx expo start
 ```
 
-O perfil `preview` gera APK instalável; produção deve gerar AAB para a Play Store.
+## APK Android oficial
+
+Workflow oficial:
+
+`.github/workflows/build-android-apk.yml`
+
+O pipeline executa:
+
+1. `npm ci`
+2. `npm run typecheck`
+3. `npx expo prebuild --platform android --clean`
+4. `./gradlew assembleRelease`
+5. upload do artifact `fio-do-bigode-v0.6.1-apk`
+
+## Release
+
+A baseline v0.6.1 usa:
+
+- versão Expo: 0.6.1
+- iOS buildNumber: 13
+- Android versionCode: 13
+- package/bundle: `com.fiodobigode.app`
+
+A publicação em loja deve ocorrer somente depois do E2E final e da aprovação do merge no `main`.
