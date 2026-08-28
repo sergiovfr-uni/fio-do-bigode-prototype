@@ -1,76 +1,70 @@
-# Fio do Bigode
+# Fio do Bigode — baseline operacional v0.6.1
 
-Baseline consolidado do MVP: **v0.6.1**.
+O Fio do Bigode é uma plataforma para formalização de negociações entre pessoas, com proposta, contraproposta, contrato, assinatura eletrônica, acompanhamento de pagamentos, classificados e reputação.
 
 ## Componentes
 
-- `website/` — site institucional público. Não deve oferecer login/cadastro da aplicação.
-- `live.html` — jornada operacional web usada pelo MVP mobile em homologação.
-- `mobile/` — shell React Native/Expo que executa a jornada homologada e integra recursos nativos necessários.
-- `admin/` — painel administrativo conectado à API real.
-- `backend/contracts/` — contratos e referências de integração; não contém o backend de produção.
-- `data/` — dados estáticos auxiliares usados pelo site/protótipo.
+- `live.html` — jornada web/mobile atual do MVP.
+- `mobile/` — shell React Native + Expo para Android/iOS.
+- `admin/` — painel administrativo.
+- `backend/` — contratos e documentação técnica das APIs.
+- `website/` — site institucional público.
 
 ## API
 
-Produção/homologação operacional utiliza:
+A jornada operacional usa a API do Fio do Bigode hospedada em ambiente externo. Credenciais, chaves e segredos não devem ser persistidos no repositório.
 
-`https://api.nofiodobigode.app.br/api/v1`
+## Jornada principal homologada
 
-O backend de produção é externo a este repositório. Portanto, uma alteração de interface que dependa de endpoint novo só deve ser considerada concluída após validação contra a API real.
+1. Cadastro/login + 2FA.
+2. KYC.
+3. Criação ou recebimento de negociação.
+4. Proposta / contraproposta / aceite.
+5. Qualificação contratual.
+6. Testemunhas opcionais.
+7. Geração do documento.
+8. Assinatura eletrônica do vendedor.
+9. Assinatura eletrônica do comprador.
+10. Comprovante da entrada.
+11. Confirmação da entrada.
+12. Parcelas e comprovantes.
+13. Quitação.
+14. Avaliação das partes.
+15. Histórico documental.
 
-## Jornada vigente
+O fluxo acima foi executado ponta a ponta em homologação em **28/08/2026** e foi **funcionalmente aprovado**.
 
-1. cadastro + LGPD;
-2. 2FA por e-mail;
-3. KYC Didit;
-4. classificados ou negociação direta;
-5. proposta/contraproposta e aceite;
-6. testemunhas opcionais;
-7. assinatura eletrônica do vendedor;
-8. assinatura eletrônica do comprador;
-9. comprovante e confirmação da entrada;
-10. parcelas / inadimplência;
-11. quitação e reputação.
+## Ajustes pendentes/estabilizados
 
-## Assinatura
+Durante o E2E foram encontrados três ajustes de UX, sem impacto na regra de negócio:
 
-O fluxo oficial para novas negociações é a assinatura eletrônica interna com código enviado por e-mail, consentimento explícito e assinatura desenhada. O fluxo externo Gov.br/ICP-Brasil é legado e só deve existir para compatibilidade de negociações antigas.
+- modal de confirmação fora do centro da tela em alguns dispositivos;
+- canvas de assinatura aparecendo antes do preenchimento do código de seis dígitos;
+- formulário de dados contratuais permanecendo aberto após salvar.
 
-## Mobile
-
-Versão do app: `0.6.1`, Android `versionCode 13`, iOS `buildNumber 13`.
-
-A arquitetura de MVP é `React Native/Expo -> WebView -> live.html -> API`. A URL da jornada pode ser definida por `EXPO_PUBLIC_APP_URL`; sem variável, existe fallback para o GitHub Pages homologado.
+A estabilização v0.6.1 aplica esses ajustes no shell mobile enquanto a limpeza física do `live.html` é feita de forma incremental.
 
 ## Build Android
 
-Pipeline oficial:
+Workflow oficial:
 
 `.github/workflows/build-android-apk.yml`
 
-Ele executa:
+O artifact esperado é:
 
-- `npm ci`;
-- `npm run typecheck`;
-- `expo prebuild --clean`;
-- `gradlew assembleRelease`;
-- publicação do APK como artefato `fio-do-bigode-v0.6.1-apk`.
-
-O workflow `android-apk.yml` está mantido apenas como legado/manual e não deve ser usado para releases.
+`fio-do-bigode-v0.6.1-apk`
 
 ## Regra de release
 
-Nenhuma versão deve ser promovida para `main` sem validar:
+Nenhum merge no `main` deve ocorrer sem:
 
-- login/2FA;
-- KYC;
-- criação e aceite de negociação;
-- assinatura das duas partes;
-- entrada;
-- parcelas/quitação;
-- classificados;
-- painel administrativo;
-- build Android.
+- E2E principal verde;
+- build Android verde;
+- confirmação de que os ajustes de UX não introduziram regressão;
+- revisão do PR da baseline.
 
-Veja `docs/BASELINE-v0.6.1.md` para o checklist completo.
+## Limpeza estrutural
+
+O `live.html` contém camadas históricas e implementações sobrescritas. A limpeza deve ser gradual e orientada por E2E, evitando substituição integral enquanto o MVP estiver em estabilização.
+
+Consulte `docs/BASELINE-v0.6.1.md` para o checklist completo.
