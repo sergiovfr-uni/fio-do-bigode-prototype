@@ -51,30 +51,22 @@ jobs:
       - name: Gerar projeto Android
         run: npx expo prebuild --platform android --non-interactive --clean
 
-      - name: Compilar APK de homologação
+      - name: Compilar APK de homologação assinado
         run: chmod +x gradlew && ./gradlew assembleDebug
         working-directory: mobile/android
 
-      - name: Assinar APK explicitamente
+      - name: Verificar assinatura e certificado do APK
         run: |
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$BUILD_TOOLS/apksigner" sign \
-            --ks "$HOME/.android/debug.keystore" \
-            --ks-key-alias androiddebugkey \
-            --ks-pass pass:android \
-            --key-pass pass:android \
-            --out android/app/build/outputs/apk/debug/fio-do-bigode-homologacao.apk \
-            android/app/build/outputs/apk/debug/app-debug.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs android/app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Verificar assinatura do APK
-        run: |
-          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs android/app/build/outputs/apk/debug/fio-do-bigode-homologacao.apk
+      - name: Preparar APK homologado
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/fio-do-bigode-v0.6.1-homologacao.apk
 
-      - name: Disponibilizar APK
+      - name: Disponibilizar APK validado
         uses: actions/upload-artifact@v4
         with:
-          name: fio-do-bigode-v0.6.1-homologacao-assinado-apk
-          path: mobile/android/app/build/outputs/apk/debug/fio-do-bigode-homologacao.apk
+          name: fio-do-bigode-v0.6.1-homologacao-validado
+          path: mobile/android/app/build/outputs/apk/debug/fio-do-bigode-v0.6.1-homologacao.apk
           if-no-files-found: error
           retention-days: 14
