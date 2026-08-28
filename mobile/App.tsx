@@ -15,12 +15,14 @@ import { WebView } from 'react-native-webview';
 import type { WebViewNavigation } from 'react-native-webview';
 import type { WebViewMessageEvent } from 'react-native-webview';
 
-const APP_URL = 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html';
+const FALLBACK_APP_URL = 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html';
+const APP_URL = process.env.EXPO_PUBLIC_APP_URL || FALLBACK_APP_URL;
 
 export default function App() {
   const webView = useRef<WebView>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const onNavigationStateChange = useCallback((navigation: WebViewNavigation) => {
     setCanGoBack(navigation.canGoBack);
@@ -30,14 +32,27 @@ export default function App() {
     try {
       const message = JSON.parse(event.nativeEvent.data);
       if (message.type !== 'download' || !message.dataUrl) return;
+
       const match = String(message.dataUrl).match(/^data:([^;]+);base64,(.+)$/s);
       if (!match) throw new Error('Arquivo recebido em formato inválido.');
+
       const safeName = String(message.fileName || 'documento').replace(/[^a-zA-Z0-9._-]/g, '-');
       const uri = FileSystem.cacheDirectory + safeName;
-      await FileSystem.writeAsStringAsync(uri, match[2], { encoding: FileSystem.EncodingType.Base64 });
-      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: match[1], dialogTitle: 'Salvar ou compartilhar arquivo' });
+
+      await FileSystem.writeAsStringAsync(uri, match[2], {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: match[1],
+          dialogTitle: 'Salvar ou compartilhar arquivo',
+        });
+      }
     } catch {
-      webView.current?.injectJavaScript("document.getElementById('dealActionStatus').textContent='Não foi possível preparar o arquivo no aparelho.';true;");
+      webView.current?.injectJavaScript(
+        "const s=document.getElementById('dealActionStatus');if(s)s.textContent='Não foi possível preparar o arquivo no aparelho.';true;",
+      );
     }
   }, []);
 
@@ -51,6 +66,11 @@ export default function App() {
     return () => subscription.remove();
   }, [canGoBack]);
 
+  const retry = useCallback(() => {
+    setFailed(false);
+    setReloadKey((value) => value + 1);
+  }, []);
+
   if (failed) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -61,11 +81,7 @@ export default function App() {
           <Text style={styles.errorText}>
             Verifique sua conexão com a internet e tente novamente.
           </Text>
-          <TouchableOpacity
-            accessibilityRole="button"
-            style={styles.retryButton}
-            onPress={() => setFailed(false)}
-          >
+          <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={retry}>
             <Text style={styles.retryText}>Tentar novamente</Text>
           </TouchableOpacity>
         </View>
@@ -77,6 +93,7 @@ export default function App() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <WebView
+        key={reloadKey}
         ref={webView}
         source={{ uri: APP_URL }}
         originWhitelist={['https://*']}
