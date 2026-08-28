@@ -1,109 +1,82 @@
-# Baseline de Homologação — Fio do Bigode v0.6.1
+# Baseline v0.6.1 — Fio do Bigode
 
-Data de consolidação: 28/08/2026.
+Data: 28/08/2026
 
 ## Objetivo
 
-Transformar o estado atual do MVP em uma base controlada, executável e verificável antes da publicação comercial.
+Consolidar uma referência estável para homologação do MVP antes da publicação e antes da limpeza estrutural do `live.html`.
 
-## Estado por módulo
+## Estado dos módulos
 
-| Módulo | Estado de código | Validação necessária |
-| --- | --- | --- |
-| Site institucional | implementado | conferir domínio oficial, CTAs das lojas e classificados públicos |
-| Login / cadastro | implementado | smoke test com usuário novo |
-| Recuperação de senha | implementado | envio + token + nova senha |
-| 2FA por e-mail | implementado | login real e expiração do código |
-| KYC Didit | integrado | sessão real, retorno e webhook |
-| Negociação direta | implementado | vendedor e comprador distintos |
-| Busca de usuário | implementado | nome/e-mail/telefone/CPF conforme API disponível |
-| Proposta / contraproposta | implementado | alteração de condições e invalidação de aceite anterior |
-| Aceite bilateral | implementado | conferir transição de estado |
-| Testemunhas | implementado | com zero e com duas testemunhas |
-| Assinatura eletrônica | implementado | vendedor primeiro, comprador depois, OTP e consentimento |
-| Entrada | implementado | upload pelo comprador e confirmação do vendedor |
-| Parcelas | implementado | geração de cronograma e confirmação de recebimento |
-| Inadimplência | implementado | simular vencimento e estado `overdue` |
-| Quitação | implementado | última parcela, `paid_off` e documento/registro final |
-| Classificados | implementado | criar anúncio, imagem, categoria e proposta |
-| Reputação | implementado | avaliação pós-fechamento e atualização do Bigode |
-| Notificações internas | implementado | central, leitura e contador |
-| Push nativo | pendente de comprovação | validar Android/iOS em dispositivo físico |
-| Planos | implementado no Admin | atribuição, limites e trial |
-| Parceiros | implementado no Admin | CRUD e links sociais |
-| Anunciantes / campanhas | implementado no Admin | CRUD, período, mídia e métricas |
-| Auditoria | implementado no Admin | operações sensíveis gerando log |
-| APK Android | pipeline consolidado | CI verde + instalação em aparelho |
-| iOS | configuração presente | build/TestFlight ainda precisa ser executado |
+- Autenticação + 2FA por e-mail: operacional.
+- Recuperação de senha: operacional.
+- Cadastro + consentimentos LGPD: operacional.
+- KYC Didit: integrado no fluxo atual; validar sessão/webhook/status em produção controlada.
+- Classificados: operacional para publicação, consulta e propostas.
+- Negociação direta: operacional.
+- Busca de usuário cadastrado: operacional, incluindo busca por nome com seleção explícita.
+- Aceite e contraproposta: operacional.
+- Testemunhas opcionais: operacional.
+- Assinatura eletrônica interna: operacional no fluxo atual.
+- Comprovante de entrada + confirmação: operacional.
+- Parcelas + comprovantes + confirmação: operacional.
+- Quitação + avaliação: operacional.
+- Admin: módulos principais presentes; autenticação e ações críticas devem permanecer protegidas.
+- APK Android: pipeline oficial consolidado.
+- iOS/TestFlight: ainda não homologado nesta baseline.
 
-## Fluxo E2E obrigatório
+## E2E realizado em 28/08/2026
 
-Executar com base limpa e dois usuários reais de homologação.
+Fluxo completo aprovado em homologação com dois usuários controlados:
 
-### Usuário A — vendedor
+1. Login no APK Android.
+2. Recuperação do estado KYC já verificado após reinstalação.
+3. Busca nominal da contraparte cadastrada.
+4. Criação de negociação direta.
+5. Recebimento e aceite da proposta pela contraparte.
+6. Formalização sem testemunhas.
+7. Assinatura eletrônica do vendedor.
+8. Assinatura eletrônica do comprador.
+9. Transição para `Negócio Feito`.
+10. Envio do comprovante de entrada pelo comprador.
+11. Confirmação da entrada pelo vendedor.
+12. Geração correta das parcelas.
+13. Envio e confirmação de comprovantes de parcelas.
+14. Quitação da negociação.
+15. Recebimento final e avaliação das partes.
 
-1. criar conta;
-2. validar 2FA;
-3. concluir KYC;
-4. criar negociação;
-5. convidar usuário B;
-6. aceitar contraproposta, se houver;
-7. decidir testemunhas;
-8. assinar eletronicamente primeiro;
-9. confirmar entrada;
-10. confirmar parcelas;
-11. avaliar comprador ao encerrar.
+Resultado: **E2E funcionalmente aprovado**.
 
-### Usuário B — comprador
+## Ajustes de UX identificados no E2E
 
-1. receber convite;
-2. criar conta se necessário;
-3. validar 2FA e KYC;
-4. aceitar ou fazer contraproposta;
-5. aguardar formalização;
-6. assinar eletronicamente depois do vendedor;
-7. enviar comprovante da entrada;
-8. acompanhar parcelas;
-9. avaliar vendedor ao encerrar.
+- Modal de confirmação aparecia deslocado para o rodapé em algumas telas móveis; corrigir centralização e respeito às safe areas.
+- Campo de assinatura desenhada deve permanecer oculto até o usuário preencher o código de seis dígitos recebido por e-mail.
+- Após salvar os dados contratuais no perfil, o formulário deve fechar automaticamente.
 
-## Critérios de bloqueio
+Esses itens não bloquearam o fluxo de negócio, mas fazem parte da estabilização da v0.6.1 antes do merge.
 
-Não promover para produção se ocorrer qualquer um dos itens abaixo:
+## Critérios bloqueadores antes do merge no `main`
 
-- usuário consegue pular KYC quando ele é obrigatório;
-- assinatura do comprador ocorre antes da do vendedor;
-- OTP pode ser reutilizado ou usado por outro usuário;
-- contraproposta mantém aceite de condições antigas;
-- documento final não corresponde às condições congeladas;
-- comprovante de entrada fica visível para usuário não autorizado;
-- parcela paga reaparece como pendente após recarregar;
-- negociação quitada ainda aceita alterações financeiras;
-- Admin consegue operar sem 2FA/autorização;
-- APK não reproduz download/compartilhamento de documentos;
-- site público expõe login/cadastro da jornada operacional.
+- Login e 2FA sem regressão.
+- KYC persistente e acesso restrito quando pendente.
+- Convite/negociação sem duplicidade.
+- Contraproposta deve invalidar aceites anteriores quando aplicável.
+- Termos acordados congelados antes da formalização.
+- Ordem de assinatura: vendedor primeiro, comprador depois.
+- Código de assinatura associado ao usuário e negociação corretos.
+- Documento final preservado com evidências.
+- Entrada e comprovantes persistidos corretamente.
+- Parcelas e saldo coerentes com a negociação.
+- `paid_off` não pode ser revertido por operação comum.
+- Termo de quitação disponível ao final da jornada.
+- Admin sem exposição pública indevida.
+- Download/compartilhamento de documentos funcionando no APK.
+- Site institucional público sem login/cadastro operacional.
 
-## Limpeza técnica desta baseline
+## Regra de limpeza
 
-- versão mobile alinhada para 0.6.1;
-- build Android alinhado para versionCode 13;
-- pipeline de APK único/oficial;
-- workflow antigo neutralizado;
-- `npm ci` e TypeScript obrigatórios no CI;
-- documentação atualizada para assinatura eletrônica interna;
-- fluxo Gov.br tratado somente como legado;
-- arquitetura WebView registrada explicitamente;
-- API de produção identificada como componente externo ao repositório.
+O `live.html` ainda contém implementações históricas e sobreposições sucessivas. A limpeza física deve ser incremental, sempre após E2E verde, evitando substituição integral ou remoção agressiva de trechos que ainda possam sustentar o fluxo homologado.
 
-## Próxima evolução técnica
+## Direção arquitetural
 
-Depois da homologação do MVP, migrar progressivamente da WebView para telas React Native nativas, priorizando:
-
-1. autenticação e sessão segura;
-2. push notifications;
-3. KYC/câmera;
-4. assinatura eletrônica;
-5. uploads/downloads;
-6. deep links de convites;
-7. classificados e negociação.
-
-A migração deve preservar contratos da API para não interromper o backend nem a homologação existente.
+Manter o shell React Native + WebView durante a estabilização do MVP. Migrar gradualmente jornadas críticas para componentes nativos somente após a baseline funcional permanecer estável e coberta por testes reproduzíveis.
