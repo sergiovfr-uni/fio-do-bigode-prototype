@@ -16,6 +16,18 @@ import type { WebViewNavigation } from 'react-native-webview';
 import type { WebViewMessageEvent } from 'react-native-webview';
 
 const APP_URL = 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html';
+const FINAL_ADJUSTMENTS_URL = 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/final-adjustments.js?v=20260831-home-final';
+
+const LOAD_FINAL_ADJUSTMENTS = `
+(function(){
+  if (document.getElementById('fdbFinalAdjustmentsMobile')) return true;
+  var script=document.createElement('script');
+  script.id='fdbFinalAdjustmentsMobile';
+  script.src='${FINAL_ADJUSTMENTS_URL}';
+  (document.body||document.documentElement).appendChild(script);
+})();
+true;
+`;
 
 export default function App() {
   const webView = useRef<WebView>(null);
@@ -86,6 +98,7 @@ export default function App() {
         onHttpError={({ nativeEvent }) => {
           if (nativeEvent.statusCode >= 500) setFailed(true);
         }}
+        onLoadEnd={() => webView.current?.injectJavaScript(LOAD_FINAL_ADJUSTMENTS)}
         startInLoadingState
         renderLoading={() => (
           <View style={styles.loadingContainer}>
