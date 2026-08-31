@@ -14,11 +14,19 @@
     frame.addEventListener('load',()=>{
       try{
         const doc=frame.contentDocument;
-        if(!doc||doc.getElementById('fdbAdminFinalAdjustmentsScript'))return;
-        const script=doc.createElement('script');
-        script.id='fdbAdminFinalAdjustmentsScript';
-        script.src='../admin-final-adjustments.js?v=20260829';
-        doc.head.appendChild(script);
+        if(!doc)return;
+        if(!doc.getElementById('fdbAdminFinalAdjustmentsScript')){
+          const script=doc.createElement('script');
+          script.id='fdbAdminFinalAdjustmentsScript';
+          script.src='../admin-final-adjustments.js?v=20260831-1';
+          doc.head.appendChild(script);
+        }
+        if(!doc.getElementById('fdbAdminLegalAdjustmentsScript')){
+          const legal=doc.createElement('script');
+          legal.id='fdbAdminLegalAdjustmentsScript';
+          legal.src='../admin-legal-adjustments.js?v=20260831-1';
+          doc.head.appendChild(legal);
+        }
       }catch(error){console.error('Não foi possível carregar os ajustes administrativos.',error)}
     });
   </script>
