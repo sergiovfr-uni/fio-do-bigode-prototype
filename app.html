@@ -4,10 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Fio do Bigode</title>
-  <script>location.replace('live.html' + location.search + location.hash);</script>
+  <style>html,body,#appFrame{margin:0;width:100%;height:100%;border:0;background:#f4f1eb}body{overflow:hidden}</style>
 </head>
 <body>
-  <p>Abrindo o <a id="appLink" href="live.html">Fio do Bigode</a>…</p>
-  <script>document.getElementById('appLink').href = 'live.html' + location.search + location.hash;</script>
+  <iframe id="appFrame" title="Fio do Bigode"></iframe>
+  <script>
+    const frame=document.getElementById('appFrame');
+    frame.src='live.html'+location.search+location.hash;
+    frame.addEventListener('load',()=>{
+      try{
+        const doc=frame.contentDocument;
+        if(!doc||doc.getElementById('fdbFinalAdjustmentsScript'))return;
+        const script=doc.createElement('script');
+        script.id='fdbFinalAdjustmentsScript';
+        script.src='final-adjustments.js?v=20260831-partners';
+        doc.body.appendChild(script);
+      }catch(_){ }
+    });
+  </script>
 </body>
 </html>
