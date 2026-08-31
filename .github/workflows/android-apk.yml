@@ -1,46 +1,15 @@
-name: Build Android APK
+name: Build Android APK (legado - desativado)
 
+# Mantido temporariamente apenas para histórico.
+# O pipeline oficial está em .github/workflows/build-android-apk.yml.
+# Não possui gatilhos automáticos para evitar builds duplicadas.
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'mobile/**'
-      - '.github/workflows/android-apk.yml'
 
 jobs:
-  build:
+  aviso:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: mobile
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Expo prebuild Android
-        run: npx expo prebuild --platform android --non-interactive
-
-      - name: Build release APK
-        run: cd android && chmod +x gradlew && ./gradlew assembleRelease
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: fio-do-bigode-apk
-          path: mobile/android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
+      - name: Pipeline legado
+        run: |
+          echo "Workflow legado. Use build-android-apk.yml para gerar o APK oficial."

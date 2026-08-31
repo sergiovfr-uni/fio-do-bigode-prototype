@@ -1,1 +1,34 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fio do Bigode Admin</title><meta http-equiv="refresh" content="0; url=admin/"><script>location.replace('admin/');</script></head><body><p>Abrindo Fio do Bigode Admin...</p></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Fio do Bigode Admin</title>
+  <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f4f1eb}#adminFrame{display:block;width:100%;height:100%;border:0}</style>
+</head>
+<body>
+  <iframe id="adminFrame" title="Fio do Bigode Admin"></iframe>
+  <script>
+    const frame=document.getElementById('adminFrame');
+    frame.src='admin/';
+    frame.addEventListener('load',()=>{
+      try{
+        const doc=frame.contentDocument;
+        if(!doc)return;
+        if(!doc.getElementById('fdbAdminFinalAdjustmentsScript')){
+          const script=doc.createElement('script');
+          script.id='fdbAdminFinalAdjustmentsScript';
+          script.src='../admin-final-adjustments.js?v=20260831-1';
+          doc.head.appendChild(script);
+        }
+        if(!doc.getElementById('fdbAdminLegalAdjustmentsScript')){
+          const legal=doc.createElement('script');
+          legal.id='fdbAdminLegalAdjustmentsScript';
+          legal.src='../admin-legal-adjustments.js?v=20260831-1';
+          doc.head.appendChild(legal);
+        }
+      }catch(error){console.error('Não foi possível carregar os ajustes administrativos.',error)}
+    });
+  </script>
+</body>
+</html>
