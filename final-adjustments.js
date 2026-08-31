@@ -44,8 +44,6 @@
       loadPartners();
     }
 
-    // Reordena apenas uma vez. O código anterior movia os mesmos nós a cada
-    // MutationObserver e criava um loop que deixava os botões da tela inicial sem resposta.
     if(!home.__fdbHomeOrdered){
       home.appendChild(campaignTitle);
       home.appendChild(campaigns);
@@ -57,19 +55,26 @@
     return true;
   }
 
-  async function getPartners(){
-    var urls=['https://api.nofiodobigode.app.br/api/v1/community-partners','https://fio-do-bigode-prototype-production.up.railway.app/api/v1/community-partners'];
+  async function fetchFirstAvailable(urls){
     var lastError=null;
     for(var i=0;i<urls.length;i++){
       try{
         var response=await fetch(urls[i],{headers:{Accept:'application/json'}});
         if(!response.ok)throw new Error('HTTP '+response.status);
         var data=await response.json();
-        var items=Array.isArray(data)?data:(Array.isArray(data.data)?data.data:[]);
-        if(items.length)return items;
+        return {data:data,base:urls[i].replace(/\/v1\/.*$/,'/v1')};
       }catch(error){lastError=error}
     }
-    throw lastError||new Error('Parceiros indisponíveis');
+    throw lastError||new Error('Serviço indisponível');
+  }
+
+  async function getPartners(){
+    var result=await fetchFirstAvailable([
+      'https://api.nofiodobigode.app.br/api/v1/community-partners',
+      'https://fio-do-bigode-prototype-production.up.railway.app/api/v1/community-partners'
+    ]);
+    var data=result.data;
+    return Array.isArray(data)?data:(Array.isArray(data.data)?data.data:[]);
   }
 
   function partnerCard(item){
@@ -94,12 +99,44 @@
     }
   }
 
+  async function loadCampaignsFromAdminApi(){
+    var area=document.getElementById('campaignArea');
+    if(!area)return;
+    try{
+      var result=await fetchFirstAvailable([
+        'https://api.nofiodobigode.app.br/api/v1/campaigns/home',
+        'https://fio-do-bigode-prototype-production.up.railway.app/api/v1/campaigns/home'
+      ]);
+      var data=result.data;
+      var items=Array.isArray(data)?data:(Array.isArray(data.data)?data.data:[]);
+      if(!items.length){area.innerHTML='<div class="card">Nenhuma campanha ativa.</div>';return}
+      var c=items[0];
+      area.innerHTML='<div class="ad" id="homeCampaign"><div class="adBrand">'+safeText(c.advertiser||c.advertiser_name||'')+'</div><div class="adHeadline">'+safeText(c.headline||c.name||'')+'</div><b>'+safeText(c.cta||'Saiba mais')+' →</b></div>';
+      var banner=document.getElementById('homeCampaign');
+      if(c.media_path){
+        banner.style.backgroundImage='linear-gradient(90deg,#111d,#1116),url("'+String(c.media_path).replaceAll('"','%22')+'")';
+        banner.style.backgroundSize='cover';
+        banner.style.backgroundPosition='center';
+        banner.style.textShadow='0 1px 8px #000';
+      }
+      banner.addEventListener('click',function(){
+        fetch(result.base+'/campaigns/'+c.id+'/click',{method:'POST'}).catch(function(){});
+        if(c.target_url)window.open(c.target_url,'_blank');
+      });
+      fetch(result.base+'/campaigns/'+c.id+'/impression',{method:'POST'}).catch(function(){});
+    }catch(_){
+      area.innerHTML='<div class="card">Nenhuma campanha disponível.</div>';
+    }
+  }
+
+  window.loadCampaigns=loadCampaignsFromAdminApi;
+
   function hookHome(){
     if(typeof window.go!=='function'||window.go.__fdbPartners)return;
     var previous=window.go;
     window.go=function(id){
       var result=previous.apply(this,arguments);
-      if(id==='home')setTimeout(function(){arrangeHome();loadPartners()},80);
+      if(id==='home')setTimeout(function(){arrangeHome();loadPartners();loadCampaignsFromAdminApi()},80);
       return result;
     };
     window.go.__fdbPartners=true;
@@ -107,6 +144,7 @@
 
   var initialized=arrangeHome();
   hookHome();
+  loadCampaignsFromAdminApi();
   if(!initialized){
     var observer=new MutationObserver(function(){
       if(arrangeHome())observer.disconnect();
