@@ -27,31 +27,34 @@
     var home=document.getElementById('home');
     var campaigns=document.getElementById('campaignArea');
     var categories=document.getElementById('homeCategories');
-    if(!home||!campaigns||!categories)return;
+    if(!home||!campaigns||!categories)return false;
     var campaignTitle=campaigns.previousElementSibling;
     var categoryTitle=categories.previousElementSibling;
-    if(!campaignTitle||!categoryTitle)return;
+    if(!campaignTitle||!categoryTitle)return false;
 
     campaignTitle.textContent='Publicidade';
 
-    if(!document.getElementById('homePartnersSection')){
-      var section=document.createElement('div');
-      section.id='homePartnersSection';
-      section.className='partnerSection';
-      section.innerHTML='<div class="section">Quem está com a gente</div><div class="partnerIntro">Influenciadores, criadores e comunidades que ajudam a divulgar o Fio do Bigode. Toque no card para visitar o perfil ou publicação do parceiro.</div><div id="homePartners" class="partnerCarousel"><div class="partnerEmpty"><b>Quem está com a gente</b><br>Este espaço fica sempre visível. Os parceiros divulgadores ativos aparecerão aqui.</div></div>';
-      home.insertBefore(section,categoryTitle);
+    var partnerSection=document.getElementById('homePartnersSection');
+    if(!partnerSection){
+      partnerSection=document.createElement('div');
+      partnerSection.id='homePartnersSection';
+      partnerSection.className='partnerSection';
+      partnerSection.innerHTML='<div class="section">Quem está com a gente</div><div class="partnerIntro">Influenciadores, criadores e comunidades que ajudam a divulgar o Fio do Bigode. Toque no card para visitar o perfil ou publicação do parceiro.</div><div id="homePartners" class="partnerCarousel"><div class="partnerEmpty"><b>Quem está com a gente</b><br>Este espaço fica sempre visível. Os parceiros divulgadores ativos aparecerão aqui.</div></div>';
+      home.insertBefore(partnerSection,categoryTitle);
       loadPartners();
     }
 
-    var partnerSection=document.getElementById('homePartnersSection');
-
-    // Home: publicidade primeiro, parceiros em seguida e classificados por categoria por último.
-    // Categorias permanecem na Home como atalho, mas não disputam prioridade com conteúdo institucional/comercial.
-    if(campaignTitle.parentNode===home)home.appendChild(campaignTitle);
-    if(campaigns.parentNode===home)home.appendChild(campaigns);
-    if(partnerSection&&partnerSection.parentNode===home)home.appendChild(partnerSection);
-    if(categoryTitle.parentNode===home)home.appendChild(categoryTitle);
-    if(categories.parentNode===home)home.appendChild(categories);
+    // Reordena apenas uma vez. O código anterior movia os mesmos nós a cada
+    // MutationObserver e criava um loop que deixava os botões da tela inicial sem resposta.
+    if(!home.__fdbHomeOrdered){
+      home.appendChild(campaignTitle);
+      home.appendChild(campaigns);
+      home.appendChild(partnerSection);
+      home.appendChild(categoryTitle);
+      home.appendChild(categories);
+      home.__fdbHomeOrdered=true;
+    }
+    return true;
   }
 
   async function getPartners(){
@@ -102,7 +105,13 @@
     window.go.__fdbPartners=true;
   }
 
-  var observer=new MutationObserver(function(){arrangeHome();hookHome()});
-  observer.observe(document.documentElement,{childList:true,subtree:true});
-  arrangeHome();hookHome();
+  var initialized=arrangeHome();
+  hookHome();
+  if(!initialized){
+    var observer=new MutationObserver(function(){
+      if(arrangeHome())observer.disconnect();
+      hookHome();
+    });
+    observer.observe(document.documentElement,{childList:true,subtree:true});
+  }
 })();
