@@ -31,22 +31,40 @@
     var campaignTitle=campaigns.previousElementSibling;
     var categoryTitle=categories.previousElementSibling;
     if(!campaignTitle||!categoryTitle)return;
+
     campaignTitle.textContent='Publicidade';
-    if(campaignTitle.nextElementSibling===campaigns){home.insertBefore(campaignTitle,categoryTitle);home.insertBefore(campaigns,categoryTitle)}
+
     if(!document.getElementById('homePartnersSection')){
       var section=document.createElement('div');
-      section.id='homePartnersSection';section.className='partnerSection';
-      section.innerHTML='<div class="section">Quem está com a gente</div><div class="partnerIntro">Influenciadores, criadores e comunidades que ajudam a divulgar o Fio do Bigode. Toque no card para visitar o perfil ou publicação do parceiro.</div><div id="homePartners" class="partnerCarousel"><div class="partnerEmpty">Carregando parceiros divulgadores…</div></div>';
+      section.id='homePartnersSection';
+      section.className='partnerSection';
+      section.innerHTML='<div class="section">Quem está com a gente</div><div class="partnerIntro">Influenciadores, criadores e comunidades que ajudam a divulgar o Fio do Bigode. Toque no card para visitar o perfil ou publicação do parceiro.</div><div id="homePartners" class="partnerCarousel"><div class="partnerEmpty"><b>Quem está com a gente</b><br>Este espaço fica sempre visível. Os parceiros divulgadores ativos aparecerão aqui.</div></div>';
       home.insertBefore(section,categoryTitle);
       loadPartners();
     }
+
+    var partnerSection=document.getElementById('homePartnersSection');
+
+    // Home: publicidade primeiro, parceiros em seguida e classificados por categoria por último.
+    // Categorias permanecem na Home como atalho, mas não disputam prioridade com conteúdo institucional/comercial.
+    if(campaignTitle.parentNode===home)home.appendChild(campaignTitle);
+    if(campaigns.parentNode===home)home.appendChild(campaigns);
+    if(partnerSection&&partnerSection.parentNode===home)home.appendChild(partnerSection);
+    if(categoryTitle.parentNode===home)home.appendChild(categoryTitle);
+    if(categories.parentNode===home)home.appendChild(categories);
   }
 
   async function getPartners(){
     var urls=['https://api.nofiodobigode.app.br/api/v1/community-partners','https://fio-do-bigode-prototype-production.up.railway.app/api/v1/community-partners'];
     var lastError=null;
     for(var i=0;i<urls.length;i++){
-      try{var response=await fetch(urls[i],{headers:{Accept:'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);var data=await response.json();var items=Array.isArray(data)?data:(Array.isArray(data.data)?data.data:[]);if(items.length)return items}catch(error){lastError=error}
+      try{
+        var response=await fetch(urls[i],{headers:{Accept:'application/json'}});
+        if(!response.ok)throw new Error('HTTP '+response.status);
+        var data=await response.json();
+        var items=Array.isArray(data)?data:(Array.isArray(data.data)?data.data:[]);
+        if(items.length)return items;
+      }catch(error){lastError=error}
     }
     throw lastError||new Error('Parceiros indisponíveis');
   }
@@ -66,17 +84,21 @@
     try{
       var items=await getPartners();
       var active=items.filter(function(item){return item.active!==false&&item.status!=='inactive'});
-      if(!active.length){area.innerHTML='<div class="partnerEmpty"><b>Parceiros em breve.</b><br>Os divulgadores ativos cadastrados no Admin aparecerão automaticamente aqui.</div>';return}
+      if(!active.length){area.innerHTML='<div class="partnerEmpty"><b>Quem está com a gente</b><br>Parceiros em breve. Os divulgadores ativos cadastrados no Admin aparecerão automaticamente aqui.</div>';return}
       area.innerHTML=active.map(partnerCard).join('');
     }catch(_){
-      area.innerHTML='<div class="partnerEmpty"><b>Quem está com a gente</b><br>Não foi possível consultar os parceiros agora. A área continuará visível e tentará novamente ao abrir a Home.</div>';
+      area.innerHTML='<div class="partnerEmpty"><b>Quem está com a gente</b><br>Não foi possível consultar os parceiros agora. Este espaço continuará visível e tentará novamente ao abrir a Home.</div>';
     }
   }
 
   function hookHome(){
     if(typeof window.go!=='function'||window.go.__fdbPartners)return;
     var previous=window.go;
-    window.go=function(id){var result=previous.apply(this,arguments);if(id==='home')setTimeout(function(){arrangeHome();loadPartners()},80);return result};
+    window.go=function(id){
+      var result=previous.apply(this,arguments);
+      if(id==='home')setTimeout(function(){arrangeHome();loadPartners()},80);
+      return result;
+    };
     window.go.__fdbPartners=true;
   }
 
