@@ -23,6 +23,25 @@
 
   function safeText(value){return String(value==null?'':value).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]})}
 
+  function setupInterestInput(){
+    var input=document.getElementById('dInterest');
+    if(!input||input.__fdbEditableInterest)return;
+    input.__fdbEditableInterest=true;
+    input.placeholder='0,00%';
+    input.addEventListener('focus',function(){
+      var raw=String(input.value||'').replace('%','').replace(',','.').trim();
+      var value=Number(raw)||0;
+      if(value===0){
+        input.value='';
+      }else{
+        setTimeout(function(){try{input.select()}catch(_){}},0);
+      }
+    });
+    input.addEventListener('blur',function(){
+      if(!String(input.value||'').trim())input.value='0,00%';
+    });
+  }
+
   function arrangeHome(){
     var home=document.getElementById('home');
     var campaigns=document.getElementById('campaignArea');
@@ -137,16 +156,19 @@
     window.go=function(id){
       var result=previous.apply(this,arguments);
       if(id==='home')setTimeout(function(){arrangeHome();loadPartners();loadCampaignsFromAdminApi()},80);
+      if(id==='newDeal')setTimeout(setupInterestInput,0);
       return result;
     };
     window.go.__fdbPartners=true;
   }
 
   var initialized=arrangeHome();
+  setupInterestInput();
   hookHome();
   loadCampaignsFromAdminApi();
   if(!initialized){
     var observer=new MutationObserver(function(){
+      setupInterestInput();
       if(arrangeHome())observer.disconnect();
       hookHome();
     });
