@@ -18,6 +18,24 @@ import type { WebViewMessageEvent } from 'react-native-webview';
 
 const APP_URL = 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html';
 const LIVE_REFRESH_MS = 30000;
+const RUNTIME_VERSION = '20260901-mobile-final1';
+
+const LOAD_RUNTIME_SCRIPTS = `
+(function(){
+  try {
+    function load(id, src){
+      if(document.getElementById(id)) return;
+      var script=document.createElement('script');
+      script.id=id;
+      script.src=src;
+      document.body.appendChild(script);
+    }
+    load('fdbFinalAdjustmentsScript','https://sergiovfr-uni.github.io/fio-do-bigode-prototype/final-adjustments.js?v=${RUNTIME_VERSION}');
+    load('fdbRuntimeFixesScript','https://sergiovfr-uni.github.io/fio-do-bigode-prototype/runtime-fixes.js?v=${RUNTIME_VERSION}');
+  } catch (_) {}
+  true;
+})();
+`;
 
 const REFRESH_DYNAMIC_DATA = `
 (function(){
@@ -46,6 +64,11 @@ export default function App() {
   const refreshDynamicData = useCallback(() => {
     webView.current?.injectJavaScript(REFRESH_DYNAMIC_DATA);
   }, []);
+
+  const loadRuntimeScripts = useCallback(() => {
+    webView.current?.injectJavaScript(LOAD_RUNTIME_SCRIPTS);
+    setTimeout(refreshDynamicData, 700);
+  }, [refreshDynamicData]);
 
   const onNavigationStateChange = useCallback((navigation: WebViewNavigation) => {
     setCanGoBack(navigation.canGoBack);
@@ -82,8 +105,6 @@ export default function App() {
       const wasBackground = /inactive|background/.test(appState.current);
       appState.current = nextState;
       if (wasBackground && nextState === 'active') {
-        // Ao voltar ao aplicativo, busca a versão remota novamente. Isso traz
-        // alterações de código/layout sem exigir fechar o APK manualmente.
         webView.current?.reload();
       }
     });
@@ -128,7 +149,7 @@ export default function App() {
         originWhitelist={['https://*']}
         onNavigationStateChange={onNavigationStateChange}
         onMessage={onMessage}
-        onLoadEnd={refreshDynamicData}
+        onLoadEnd={loadRuntimeScripts}
         onError={() => setFailed(true)}
         onHttpError={({ nativeEvent }) => {
           if (nativeEvent.statusCode >= 500) setFailed(true);
