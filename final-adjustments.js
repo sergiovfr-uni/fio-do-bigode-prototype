@@ -43,6 +43,17 @@
     input.addEventListener('blur',function(){if(!String(input.value||'').trim())input.value='0,00%'});
   }
 
+  function hookHomeCategoryNavigation(){
+    if(typeof window.setHomeCategory!=='function'||window.setHomeCategory.__fdbNavigatesToClassifieds)return;
+    window.setHomeCategory=function(category){
+      try{window.homeCategory=category}catch(_){}
+      try{window.classifiedCategory=category}catch(_){}
+      if(typeof window.renderListings==='function')window.renderListings();
+      if(typeof window.go==='function')window.go('classifieds');
+    };
+    window.setHomeCategory.__fdbNavigatesToClassifieds=true;
+  }
+
   function arrangeHome(){
     var home=document.getElementById('home');
     var campaigns=document.getElementById('campaignArea');
@@ -178,7 +189,7 @@
     var previous=window.go;
     window.go=function(id){
       var result=previous.apply(this,arguments);
-      if(id==='home')setTimeout(function(){arrangeHome();loadPartners();loadCampaignsFromAdminApi()},80);
+      if(id==='home')setTimeout(function(){arrangeHome();loadPartners();loadCampaignsFromAdminApi();hookHomeCategoryNavigation()},80);
       if(id==='newDeal')setTimeout(setupInterestInput,0);
       return result;
     };
@@ -187,11 +198,13 @@
 
   var initialized=arrangeHome();
   setupInterestInput();
+  hookHomeCategoryNavigation();
   hookHome();
   loadCampaignsFromAdminApi();
   if(!initialized){
     var observer=new MutationObserver(function(){
       setupInterestInput();
+      hookHomeCategoryNavigation();
       if(arrangeHome())observer.disconnect();
       hookHome();
     });
