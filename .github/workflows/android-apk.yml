@@ -1,8 +1,14 @@
 name: Build Android APK
 
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     paths:
       - 'mobile/**'
       - '.github/workflows/android-apk.yml'
@@ -22,6 +28,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -29,18 +37,32 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install reproducible dependencies
+        run: npm ci
 
-      - name: Expo prebuild Android
-        run: npx expo prebuild --platform android --non-interactive
+      - name: Validate TypeScript
+        run: npm run typecheck
+
+      - name: Clean prebuild Android
+        run: npx expo prebuild --platform android --non-interactive --clean
 
       - name: Build release APK
-        run: cd android && chmod +x gradlew && ./gradlew assembleRelease
+        run: chmod +x gradlew && ./gradlew clean assembleRelease
+        working-directory: mobile/android
 
-      - name: Upload APK
+      - name: Verify APK signature
+        shell: bash
+        run: |
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -f "$APK"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+
+      - name: Upload validated APK
         uses: actions/upload-artifact@v4
         with:
-          name: fio-do-bigode-apk
+          name: fio-do-bigode-v0.6.2-build14-validado
           path: mobile/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+          retention-days: 30
