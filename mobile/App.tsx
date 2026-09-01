@@ -4,6 +4,7 @@ import * as Sharing from 'expo-sharing';
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   BackHandler,
   SafeAreaView,
   StyleSheet,
@@ -16,12 +17,35 @@ import type { WebViewNavigation } from 'react-native-webview';
 import type { WebViewMessageEvent } from 'react-native-webview';
 
 const APP_URL = 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html';
+const LIVE_REFRESH_MS = 30000;
+
+const REFRESH_DYNAMIC_DATA = `
+(function(){
+  try {
+    var calls = ['loadCampaigns','loadListings','loadDeals','loadNotifications'];
+    calls.forEach(function(name){
+      try {
+        if (typeof window[name] === 'function') {
+          var result = window[name]();
+          if (result && typeof result.catch === 'function') result.catch(function(){});
+        }
+      } catch (_) {}
+    });
+  } catch (_) {}
+  true;
+})();
+`;
 
 export default function App() {
   const webView = useRef<WebView>(null);
+  const appState = useRef(AppState.currentState);
   const [canGoBack, setCanGoBack] = useState(false);
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+
+  const refreshDynamicData = useCallback(() => {
+    webView.current?.injectJavaScript(REFRESH_DYNAMIC_DATA);
+  }, []);
 
   const onNavigationStateChange = useCallback((navigation: WebViewNavigation) => {
     setCanGoBack(navigation.canGoBack);
@@ -52,6 +76,26 @@ export default function App() {
     });
     return () => subscription.remove();
   }, [canGoBack]);
+
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextState => {
+      const wasBackground = /inactive|background/.test(appState.current);
+      appState.current = nextState;
+      if (wasBackground && nextState === 'active') {
+        // Ao voltar ao aplicativo, busca a versão remota novamente. Isso traz
+        // alterações de código/layout sem exigir fechar o APK manualmente.
+        webView.current?.reload();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      if (appState.current === 'active' && !failed) refreshDynamicData();
+    }, LIVE_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [failed, refreshDynamicData]);
 
   const retry = useCallback(() => {
     setFailed(false);
@@ -84,6 +128,7 @@ export default function App() {
         originWhitelist={['https://*']}
         onNavigationStateChange={onNavigationStateChange}
         onMessage={onMessage}
+        onLoadEnd={refreshDynamicData}
         onError={() => setFailed(true)}
         onHttpError={({ nativeEvent }) => {
           if (nativeEvent.statusCode >= 500) setFailed(true);
@@ -99,6 +144,7 @@ export default function App() {
         domStorageEnabled
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
+        cacheEnabled={false}
         allowsBackForwardNavigationGestures
         mediaPlaybackRequiresUserAction
         setSupportMultipleWindows={false}
