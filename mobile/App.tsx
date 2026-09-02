@@ -16,7 +16,7 @@ import { WebView } from 'react-native-webview';
 import type { WebViewNavigation } from 'react-native-webview';
 import type { WebViewMessageEvent } from 'react-native-webview';
 
-const RUNTIME_VERSION = '20260902-home-carousel-build15';
+const RUNTIME_VERSION = '20260902-keyboard-stability-build16';
 const APP_URL = `https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html?app=${RUNTIME_VERSION}`;
 const LIVE_REFRESH_MS = 30000;
 
@@ -110,14 +110,11 @@ export default function App() {
 
   React.useEffect(() => {
     const subscription = AppState.addEventListener('change', nextState => {
-      const wasBackground = /inactive|background/.test(appState.current);
       appState.current = nextState;
-      if (wasBackground && nextState === 'active') {
-        webView.current?.reload();
-      }
+      if (nextState === 'active') refreshDynamicData();
     });
     return () => subscription.remove();
-  }, []);
+  }, [refreshDynamicData]);
 
   React.useEffect(() => {
     const timer = setInterval(() => {
