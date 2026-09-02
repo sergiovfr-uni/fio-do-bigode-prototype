@@ -62,7 +62,7 @@ jobs:
       - name: Upload validated APK
         uses: actions/upload-artifact@v4
         with:
-          name: fio-do-bigode-v0.6.2-build14-validado
+          name: fio-do-bigode-v0.6.3-build15-validado
           path: mobile/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30

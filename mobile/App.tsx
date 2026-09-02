@@ -16,22 +16,30 @@ import { WebView } from 'react-native-webview';
 import type { WebViewNavigation } from 'react-native-webview';
 import type { WebViewMessageEvent } from 'react-native-webview';
 
-const APP_URL = 'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html';
+const RUNTIME_VERSION = '20260902-home-carousel-build15';
+const APP_URL = `https://sergiovfr-uni.github.io/fio-do-bigode-prototype/live.html?app=${RUNTIME_VERSION}`;
 const LIVE_REFRESH_MS = 30000;
-const RUNTIME_VERSION = '20260901-mobile-final1';
 
 const LOAD_RUNTIME_SCRIPTS = `
 (function(){
   try {
-    function load(id, src){
-      if(document.getElementById(id)) return;
+    function load(id, src, onload){
+      var existing=document.getElementById(id);
+      if(existing){ if(onload) onload(); return; }
       var script=document.createElement('script');
       script.id=id;
       script.src=src;
+      script.async=false;
+      if(onload) script.onload=onload;
       document.body.appendChild(script);
     }
-    load('fdbFinalAdjustmentsScript','https://sergiovfr-uni.github.io/fio-do-bigode-prototype/final-adjustments.js?v=${RUNTIME_VERSION}');
-    load('fdbRuntimeFixesScript','https://sergiovfr-uni.github.io/fio-do-bigode-prototype/runtime-fixes.js?v=${RUNTIME_VERSION}');
+    load(
+      'fdbFinalAdjustmentsScript',
+      'https://sergiovfr-uni.github.io/fio-do-bigode-prototype/final-adjustments.js?v=${RUNTIME_VERSION}',
+      function(){
+        load('fdbRuntimeFixesScript','https://sergiovfr-uni.github.io/fio-do-bigode-prototype/runtime-fixes.js?v=${RUNTIME_VERSION}');
+      }
+    );
   } catch (_) {}
   true;
 })();
