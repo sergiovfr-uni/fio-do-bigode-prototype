@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Support\GooglePlayReviewAccess;
 
 class ElectronicSignatureController extends Controller
 {
@@ -23,7 +24,8 @@ class ElectronicSignatureController extends Controller
         $role = $this->authorizedRole($request, $deal);
         abort_unless($deal->witnesses()->count() === 0, 422, 'A assinatura eletrônica integrada está disponível, neste MVP, para a formalização sem testemunhas.');
         $source = $this->sourceDocument($deal, $role);
-        $code = (string) random_int(100000, 999999);
+        $reviewPin = GooglePlayReviewAccess::pinFor($request->user());
+        $code = $reviewPin ?? (string) random_int(100000, 999999);
         $challengeId = (string) Str::uuid();
 
         DB::table('deal_electronic_signatures')->updateOrInsert(
@@ -33,7 +35,7 @@ class ElectronicSignatureController extends Controller
                 'user_id'=>$request->user()->id,
                 'otp_hash'=>Hash::make($code),
                 'attempts'=>0,
-                'expires_at'=>now()->addMinutes(5),
+                'expires_at'=>$reviewPin ? now()->addDays(30) : now()->addMinutes(5),
                 'verified_at'=>null,
                 'signed_at'=>null,
                 'source_document_sha256'=>$source->sha256,
@@ -51,16 +53,18 @@ class ElectronicSignatureController extends Controller
             ]
         );
 
-        $this->sendCode($request->user()->email, $request->user()->name, $code, $deal, $role);
+        if (!$reviewPin) $this->sendCode($request->user()->email, $request->user()->name, $code, $deal, $role);
         $events->record($deal, $request->user()->id, 'electronic_signature_code_sent', ['role'=>$role]);
 
         $response = [
             'challenge_id'=>$challengeId,
             'masked_email'=>$this->maskEmail($request->user()->email),
-            'expires_in'=>300,
+            'expires_in'=>$reviewPin ? 2592000 : 300,
             'consent_version'=>self::CONSENT_VERSION,
             'consent_text'=>self::CONSENT_TEXT,
-            'message'=>'Código enviado. Leia o documento, confirme a ciência e assine na tela.',
+            'message'=>$reviewPin
+                ? 'Use o PIN reutilizável fornecido à equipe de revisão do Google Play.'
+                : 'Código enviado. Leia o documento, confirme a ciência e assine na tela.',
         ];
         if (app()->environment('testing')) $response['test_code'] = $code;
 
@@ -109,7 +113,9 @@ class ElectronicSignatureController extends Controller
         $signedAt = now();
         $consentHash = hash('sha256', self::CONSENT_TEXT);
         $evidence = [
-            'method'=>'email_otp_plus_drawn_signature',
+            'method'=>GooglePlayReviewAccess::pinFor($request->user())
+                ? 'google_play_review_pin_plus_drawn_signature'
+                : 'email_otp_plus_drawn_signature',
             'challenge_id'=>$data['challenge_id'],
             'user_id'=>$request->user()->id,
             'role'=>$role,
