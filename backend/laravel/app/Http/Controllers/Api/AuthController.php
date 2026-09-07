@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Support\GooglePlayReviewAccess;
 
 class AuthController extends Controller
 {
@@ -60,22 +61,25 @@ class AuthController extends Controller
         $this->ensureFreeTrial($user);
 
         $challengeId = (string) Str::uuid();
-        $code = (string) random_int(100000, 999999);
+        $reviewPin = GooglePlayReviewAccess::pinFor($user);
+        $code = $reviewPin ?? (string) random_int(100000, 999999);
         Cache::put('2fa:'.$challengeId, [
             'user_id'=>$user->id,
             'code'=>$code,
             'attempts'=>0,
-        ], now()->addMinutes(5));
+        ], $reviewPin ? now()->addDays(30) : now()->addMinutes(5));
 
-        $this->sendTwoFactorCode($user, $code);
+        if (!$reviewPin) $this->sendTwoFactorCode($user, $code);
 
         return response()->json([
             'two_factor_required'=>true,
             'challenge_id'=>$challengeId,
-            'delivery'=>'email',
+            'delivery'=>$reviewPin ? 'review_pin' : 'email',
             'masked_email'=>$this->maskEmail($user->email),
-            'expires_in'=>300,
-            'message'=>'Enviamos um código de 6 dígitos para seu e-mail.',
+            'expires_in'=>$reviewPin ? 2592000 : 300,
+            'message'=>$reviewPin
+                ? 'Use o PIN reutilizável fornecido à equipe de revisão do Google Play.'
+                : 'Enviamos um código de 6 dígitos para seu e-mail.',
         ]);
     }
 
@@ -182,6 +186,8 @@ class AuthController extends Controller
             'carlos.hml@fiodobigode.com.br',
             'mariana.hml@fiodobigode.com.br',
             'rafael.hml@fiodobigode.com.br',
+            config('google_play_review.seller.email'),
+            config('google_play_review.buyer.email'),
         ];
 
         $users = User::query()
