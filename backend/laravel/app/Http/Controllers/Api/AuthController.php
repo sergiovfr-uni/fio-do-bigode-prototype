@@ -108,7 +108,6 @@ class AuthController extends Controller
 
         Cache::forget($cacheKey);
         $user = User::findOrFail($challenge['user_id']);
-        $user->tokens()->where('name', 'mobile')->delete();
 
         return response()->json([
             'token'=>$user->createToken('mobile')->plainTextToken,
