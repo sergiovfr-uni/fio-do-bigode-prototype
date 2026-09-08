@@ -67,19 +67,8 @@ jobs:
           from pathlib import Path
           path = Path('android/app/build.gradle')
           text = path.read_text()
-          debug_block = '''        debug {
-            storeFile file('debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
-        }'''
-          release_block = debug_block + '''
-        release {
-            storeFile file(FDB_UPLOAD_STORE_FILE)
-            storePassword FDB_UPLOAD_STORE_PASSWORD
-            keyAlias FDB_UPLOAD_KEY_ALIAS
-            keyPassword FDB_UPLOAD_KEY_PASSWORD
-        }'''
+          debug_block = "        debug {\n            storeFile file('debug.keystore')\n            storePassword 'android'\n            keyAlias 'androiddebugkey'\n            keyPassword 'android'\n        }"
+          release_block = debug_block + "\n        release {\n            storeFile file(FDB_UPLOAD_STORE_FILE)\n            storePassword FDB_UPLOAD_STORE_PASSWORD\n            keyAlias FDB_UPLOAD_KEY_ALIAS\n            keyPassword FDB_UPLOAD_KEY_PASSWORD\n        }"
           text = text.replace(debug_block, release_block)
           marker = 'signingConfig signingConfigs.debug'
           position = text.rfind(marker)
