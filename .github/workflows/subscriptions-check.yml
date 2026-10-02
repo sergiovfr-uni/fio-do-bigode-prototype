@@ -1,0 +1,24 @@
+name: Subscription checks
+on:
+  push:
+    branches: [feat/launch-trial-influencers]
+  pull_request:
+    paths: ['backend/laravel/**']
+permissions:
+  contents: read
+jobs:
+  subscriptions:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/laravel
+    steps:
+      - uses: actions/checkout@v4
+      - run: php -v && php -m | grep -i sqlite
+      - run: mkdir -p bootstrap/cache storage/framework/{cache/data,sessions,views} storage/logs
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: find app config database tests -name '*.php' -print0 | xargs -0 -n1 php -l
+      - run: php tests/subscriptions.php
+        env:
+          APP_ENV: testing
+          APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=

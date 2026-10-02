@@ -53,6 +53,7 @@ class DealController extends Controller
 
     public function fromListing(Request $request, Listing $listing, DealEventService $events)
     {
+        app(\App\Services\SubscriptionEntitlementService::class)->requireCurrent($request->user());
         abort_unless($listing->status === 'published', 404);
         abort_if((int) $listing->seller_id === (int) $request->user()->id, 422, 'Você não pode fazer proposta no próprio anúncio.');
         abort_unless($request->user()->kyc_status === 'verified', 403, 'Conclua a validação de identidade antes de negociar.');
@@ -80,6 +81,7 @@ class DealController extends Controller
 
     public function store(Request $request, DealEventService $events)
     {
+        app(\App\Services\SubscriptionEntitlementService::class)->assertCanCreateDirectDeal($request->user());
         abort_unless($request->user()->kyc_status === 'verified', 403, 'Conclua a validação de identidade antes de negociar.');
 
         $data = $request->validate([

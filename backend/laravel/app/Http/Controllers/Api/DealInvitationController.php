@@ -63,7 +63,7 @@ class DealInvitationController extends Controller
         $user = $request->user();
         abort_unless($user->kyc_status === 'verified', 403, 'Conclua a validação de identidade antes de criar uma negociação.');
 
-        // Homologação: negociações diretas ficam sem limite para permitir validação completa da jornada.
+        app(\App\Services\SubscriptionEntitlementService::class)->assertCanCreateDirectDeal($user);
 
         $data = $request->validate([
             'initiator_role'=>['required','in:seller'],'invitee_name'=>['nullable','string','max:160'],

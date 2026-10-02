@@ -109,14 +109,17 @@ class AdminOperationsController extends Controller
         $data = $request->validate([
             'plan_id'=>['required','integer','exists:plans,id'],
             'status'=>['required',Rule::in(['trial','active'])],
-            'days'=>['required','integer','min:1','max:365'],
+            'days'=>['nullable','integer','min:1','max:365'],
             'reason'=>['required','string','min:5','max:500'],
         ]);
         $plan = Plan::whereKey($data['plan_id'])->where('active',true)->firstOrFail();
+        abort_if($plan->complimentary && $data['status'] !== 'active', 422, 'Cortesia deve ser atribuída como ativa.');
+        abort_if(!$plan->complimentary && empty($data['days']), 422, 'Informe o prazo do plano.');
         $before = Subscription::where('user_id',$user->id)->whereIn('status',['trial','active'])->get()->toArray();
         $subscription = DB::transaction(function () use ($user,$plan,$data) {
+            User::whereKey($user->id)->lockForUpdate()->firstOrFail();
             Subscription::where('user_id',$user->id)->whereIn('status',['trial','active'])->update(['status'=>'cancelled','updated_at'=>now()]);
-            $endsAt = now()->addDays($data['days']);
+            $endsAt = empty($data['days']) ? null : now()->addDays($data['days']);
             return Subscription::create([
                 'user_id'=>$user->id,'plan_id'=>$plan->id,'status'=>$data['status'],
                 'trial_ends_at'=>$data['status']==='trial' ? $endsAt : null,
@@ -445,7 +448,10 @@ class AdminOperationsController extends Controller
             'active_listing_limit'=>['required','integer','min:0','max:10000'],
             'direct_deal_limit'=>['required','integer','min:0','max:10000'],
             'active'=>['sometimes','boolean'],
+            'admin_only'=>['sometimes','boolean'],
+            'complimentary'=>['sometimes','boolean'],
         ]);
+        abort_if(($data['complimentary'] ?? $plan?->complimentary) && ((float)$data['monthly_price'] !== 0.0 || !($data['admin_only'] ?? $plan?->admin_only)), 422, 'Cortesia deve ser gratuita e exclusiva da administração.');
         if ($plan) {
             abort_unless($data['slug']===$plan->slug, 422, 'O identificador de um plano existente não pode ser alterado.');
             unset($data['active']);
