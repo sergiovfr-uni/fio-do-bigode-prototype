@@ -105,12 +105,14 @@ class DiditKycController extends Controller
         $payload = $request->json()->all();
         $timestamp = (string) $request->header('X-Timestamp', '');
         $signature = (string) $request->header('X-Signature-V2', '');
+        $legacySignature = (string) $request->header('X-Signature', '');
         $simpleSignature = (string) $request->header('X-Signature-Simple', '');
         abort_unless($timestamp !== '' && ctype_digit($timestamp) && abs(time()-(int)$timestamp) <= 300, 401, 'Webhook expirado.');
-        abort_unless(($signature !== '' || $simpleSignature !== '') && config('didit.webhook_secret'), 401, 'Assinatura ausente.');
+        abort_unless(($signature !== '' || $legacySignature !== '' || $simpleSignature !== '') && config('didit.webhook_secret'), 401, 'Assinatura ausente.');
 
         $canonical = json_encode($this->canonicalize($payload), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
         $expected = hash_hmac('sha256', $canonical, config('didit.webhook_secret'));
+        $legacyExpected = hash_hmac('sha256', $request->getContent(), config('didit.webhook_secret'));
         $simpleCanonical = implode(':', [
             $payload['timestamp'] ?? '',
             $payload['session_id'] ?? '',
@@ -119,6 +121,7 @@ class DiditKycController extends Controller
         ]);
         $simpleExpected = hash_hmac('sha256', $simpleCanonical, config('didit.webhook_secret'));
         $verified = ($signature !== '' && hash_equals($expected, $signature))
+            || ($legacySignature !== '' && hash_equals($legacyExpected, $legacySignature))
             || ($simpleSignature !== '' && hash_equals($simpleExpected, $simpleSignature));
         abort_unless($verified, 401, 'Assinatura inválida.');
 
