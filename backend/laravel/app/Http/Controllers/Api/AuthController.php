@@ -44,7 +44,7 @@ class AuthController extends Controller
             'token_type'=>'Bearer',
             'user'=>$user,
             'next'=>'kyc',
-            'message'=>'Cadastro criado com Free Trial de 30 dias. Conclua a validação de identidade antes de operar.',
+            'message'=>'Cadastro criado com Free Trial de 60 dias. Conclua a validação de identidade antes de operar.',
         ], 201);
     }
 
@@ -67,7 +67,7 @@ class AuthController extends Controller
             'user_id'=>$user->id,
             'code'=>$code,
             'attempts'=>0,
-        ], $reviewPin ? now()->addDays(30) : now()->addMinutes(5));
+        ], $reviewPin ? now()->addDays(config('subscriptions.trial_days', 60)) : now()->addMinutes(5));
 
         if (!$reviewPin) $this->sendTwoFactorCode($user, $code);
 
@@ -154,7 +154,7 @@ class AuthController extends Controller
 
     public function me(Request $request)
     {
-        return response()->json($request->user());
+        return response()->json($request->user()->load(['subscriptions' => fn ($q) => $q->with('plan')->latest()]));
     }
 
     public function updateQualification(Request $request)
@@ -281,19 +281,19 @@ class AuthController extends Controller
 
     private function ensureFreeTrial(User $user): void
     {
-        $hasCurrent = DB::table('subscriptions')->where('user_id',$user->id)
-            ->whereIn('status',['trial','active'])
-            ->where(function($q){$q->whereNull('current_period_ends_at')->orWhere('current_period_ends_at','>',now());})
-            ->exists();
-        if ($hasCurrent) return;
+        DB::transaction(function () use ($user): void {
+            User::whereKey($user->id)->lockForUpdate()->firstOrFail();
+            // Um trial vencido nunca é renovado automaticamente ao entrar novamente.
+            if ($user->subscriptions()->exists()) return;
 
-        $planId = DB::table('plans')->where('slug','trial')->value('id');
-        if (!$planId) return;
-        DB::table('subscriptions')->insert([
-            'user_id'=>$user->id,'plan_id'=>$planId,'status'=>'trial',
-            'trial_ends_at'=>now()->addDays(30),'current_period_ends_at'=>now()->addDays(30),
-            'gateway'=>null,'external_id'=>null,'created_at'=>now(),'updated_at'=>now(),
-        ]);
+            $planId = DB::table('plans')->where('slug','trial')->value('id');
+            if (!$planId) return;
+            DB::table('subscriptions')->insert([
+                'user_id'=>$user->id,'plan_id'=>$planId,'status'=>'trial',
+                'trial_ends_at'=>now()->addDays(config('subscriptions.trial_days', 60)),'current_period_ends_at'=>now()->addDays(config('subscriptions.trial_days', 60)),
+                'gateway'=>null,'external_id'=>null,'created_at'=>now(),'updated_at'=>now(),
+            ]);
+        });
     }
 
     private function maskEmail(string $email): string
