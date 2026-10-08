@@ -37,7 +37,7 @@ class AuthController extends Controller
             'account_status' => 'active',
         ]);
         $this->ensureFreeTrial($user);
-        $token = $user->createToken('mobile')->plainTextToken;
+        $token = $user->createToken('mobile', ['*'], now()->addDays(30))->plainTextToken;
 
         return response()->json([
             'token'=>$token,
@@ -55,7 +55,7 @@ class AuthController extends Controller
             'password'=>['required','string'],
         ]);
 
-        $user = User::where('email', $data['email'])->first();
+        $user = User::where('email', mb_strtolower(trim($data['email'])))->first();
         abort_unless($user && Hash::check($data['password'], $user->password), 422, 'Credenciais inválidas.');
         abort_unless(($user->account_status ?? 'active') === 'active', 403, 'Esta conta está bloqueada ou em processo de exclusão.');
         $this->ensureFreeTrial($user);
@@ -67,6 +67,7 @@ class AuthController extends Controller
             'user_id'=>$user->id,
             'code'=>$code,
             'attempts'=>0,
+            'expires_at'=>($reviewPin ? now()->addDays(config('subscriptions.trial_days',60)) : now()->addMinutes(5))->timestamp,
         ], $reviewPin ? now()->addDays(config('subscriptions.trial_days', 60)) : now()->addMinutes(5));
 
         if (!$reviewPin) $this->sendTwoFactorCode($user, $code);
@@ -92,7 +93,7 @@ class AuthController extends Controller
 
         $cacheKey = '2fa:'.$data['challenge_id'];
         $challenge = Cache::get($cacheKey);
-        abort_unless($challenge, 422, 'Token inválido ou expirado.');
+        abort_unless($challenge && (int)($challenge['expires_at'] ?? 0) > now()->timestamp, 422, 'Token inválido ou expirado.');
 
         $attempts = (int)($challenge['attempts'] ?? 0) + 1;
         if ($attempts > 5) {
@@ -102,15 +103,16 @@ class AuthController extends Controller
 
         if (!hash_equals((string)$challenge['code'], (string)$data['code'])) {
             $challenge['attempts'] = $attempts;
-            Cache::put($cacheKey, $challenge, now()->addMinutes(5));
+            Cache::put($cacheKey, $challenge, max(1,(int)$challenge['expires_at'] - now()->timestamp));
             abort(422, 'Token inválido ou expirado.');
         }
 
         Cache::forget($cacheKey);
         $user = User::findOrFail($challenge['user_id']);
+        abort_unless(($user->account_status ?? 'active') === 'active',403,'Esta conta está bloqueada ou em processo de exclusão.');
 
         return response()->json([
-            'token'=>$user->createToken('mobile')->plainTextToken,
+            'token'=>$user->createToken('mobile', ['*'], now()->addDays(30))->plainTextToken,
             'token_type'=>'Bearer',
             'user'=>$user,
         ]);
