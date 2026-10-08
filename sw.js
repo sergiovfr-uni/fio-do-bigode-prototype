@@ -1,0 +1,5 @@
+// Private pages and API responses are never stored in this cache.
+const CACHE='fdb-public-offline-v1';
+self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(['offline.html','assets/pwa-192.png','assets/pwa-512.png'])).then(()=>self.skipWaiting())));
+self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('fdb-public-offline-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
+self.addEventListener('fetch',event=>{const url=new URL(event.request.url);if(event.request.method!=='GET'||url.origin!==self.location.origin)return;if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match(new URL('offline.html',self.registration.scope).href)));return}if(['assets/pwa-192.png','assets/pwa-512.png'].some(path=>url.href===new URL(path,self.registration.scope).href))event.respondWith(caches.match(event.request).then(cached=>cached||fetch(event.request)))});
