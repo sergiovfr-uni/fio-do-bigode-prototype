@@ -37,12 +37,12 @@ Route::prefix('v1')->group(function () {
     Route::post('/admin/auth/login', [AdminAuthController::class, 'login'])->middleware('throttle:5,1');
     Route::post('/admin/auth/2fa/verify', [AdminAuthController::class, 'verifyTwoFactor'])->middleware('throttle:10,1');
     Route::post('/kyc/didit/webhook', [DiditKycController::class, 'webhook'])->middleware('throttle:120,1');
-    Route::post('/auth/register', [AuthController::class, 'register']);
-    Route::post('/auth/login', [AuthController::class, 'login']);
-    Route::post('/auth/2fa/verify', [AuthController::class, 'verifyTwoFactor']);
-    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
-    Route::get('/deal-invitations/{code}', [DealInvitationController::class, 'show']);
+    Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:public-register');
+    Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:public-login');
+    Route::post('/auth/2fa/verify', [AuthController::class, 'verifyTwoFactor'])->middleware('throttle:public-otp');
+    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:public-recovery');
+    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:public-recovery');
+    Route::get('/deal-invitations/{code}', [DealInvitationController::class, 'show'])->middleware('throttle:30,1');
     Route::get('/campaigns/home', [CampaignController::class, 'home']);
     Route::post('/partner-applications', [\App\Http\Controllers\Api\PartnerApplicationController::class, 'store'])->middleware('throttle:5,60');
     Route::get('/community-partners', [CommunityPartnerController::class, 'index']);
@@ -50,8 +50,8 @@ Route::prefix('v1')->group(function () {
     Route::post('/campaigns/{campaign}/click', [CampaignController::class, 'click']);
     Route::get('/listings', [ListingController::class, 'index']);
     Route::get('/listings/{listing}', [ListingController::class, 'show']);
-    Route::get('/witness-invitations/{code}', [WitnessInvitationController::class, 'show']);
-    Route::get('/witness-invitations/{code}/document', [WitnessInvitationController::class, 'download']);
+    Route::get('/witness-invitations/{code}', [WitnessInvitationController::class, 'show'])->middleware('throttle:30,1');
+    Route::get('/witness-invitations/{code}/document', [WitnessInvitationController::class, 'download'])->middleware('throttle:10,1');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
