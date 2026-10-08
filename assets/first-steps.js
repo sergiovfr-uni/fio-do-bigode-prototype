@@ -16,8 +16,8 @@
     ['Pronto para começar','Você também pode publicar e consultar classificados. Reabra este guia sempre que precisar. No celular, use “Instalar” quando disponível ou a opção “Adicionar à tela inicial” no menu do navegador.','Abrir o Fio']
   ];
   function render(){const s=steps[current];dialog.querySelector('.fdbGuideStep').textContent='PRIMEIROS PASSOS · '+(current+1)+' DE '+steps.length;document.getElementById('fdbGuideTitle').textContent=s[0];document.getElementById('fdbGuideText').textContent=s[1];const action=document.getElementById('fdbGuideAction');action.textContent=s[2];action.hidden=current===0;document.getElementById('fdbGuideBack').disabled=current===0;document.getElementById('fdbGuideNext').textContent=current===steps.length-1?'Concluir guia':'Próximo';}
-  function close(){overlay.hidden=true;document.body.style.overflow='';if(previousFocus?.isConnected)previousFocus.focus();}
-  window.openFdbGuide=function(){previousFocus=document.activeElement;current=0;render();overlay.hidden=false;document.body.style.overflow='hidden';dialog.focus();};
+  function close(){document.querySelector('.app')?.removeAttribute('inert');overlay.hidden=true;document.body.style.overflow='';if(previousFocus?.isConnected)previousFocus.focus();}
+  window.openFdbGuide=function(){previousFocus=document.activeElement;current=0;render();overlay.hidden=false;document.querySelector('.app')?.setAttribute('inert','');document.body.style.overflow='hidden';dialog.focus();};
   dialog.querySelector('.fdbGuideClose').onclick=close;document.getElementById('fdbGuideLater').onclick=close;
   document.getElementById('fdbGuideBack').onclick=()=>{current=Math.max(0,current-1);render();};
   document.getElementById('fdbGuideNext').onclick=()=>{if(current===steps.length-1){localStorage.setItem('fdb_guide_completed','1');close();}else{current++;render();}};
