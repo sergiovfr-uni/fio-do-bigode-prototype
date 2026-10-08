@@ -330,6 +330,44 @@ class AdminOperationsController extends Controller
         return response()->json($wallet->fresh());
     }
 
+    public function partnerApplications() {
+        return DB::table('partner_applications')->orderByDesc('id')->paginate(100);
+    }
+
+    public function updatePartnerApplication(Request $request, int $application) {
+        $data=$request->validate(['status'=>['required',Rule::in(['new','reviewing','contacted','approved','declined'])],'reason'=>['required','string','min:5','max:500']]);
+        return DB::transaction(function () use ($request,$application,$data) {
+            $before=DB::table('partner_applications')->where('id',$application)->lockForUpdate()->first();
+            abort_unless($before,404);
+            DB::table('partner_applications')->where('id',$application)->update(['status'=>$data['status'],'updated_at'=>now()]);
+            $this->audit($request,'partner_application.status_changed','partner_application',$application,['status'=>$before->status],['status'=>$data['status']],$data['reason']);
+            return response()->json(['status'=>$data['status']]);
+        });
+    }
+
+    public function deleteCommunityPartner(Request $request, int $partner) {
+        return $this->deleteAdvertisingRecord($request,'community_partners','community_partner',$partner);
+    }
+    public function deleteAdvertiser(Request $request, int $advertiser) {
+        return $this->deleteAdvertisingRecord($request,'advertisers','advertiser',$advertiser);
+    }
+    public function deleteCampaign(Request $request, int $campaign) {
+        return $this->deleteAdvertisingRecord($request,'campaigns','campaign',$campaign);
+    }
+    private function deleteAdvertisingRecord(Request $request, string $table, string $entity, int $id) {
+        $data=$request->validate(['confirmation'=>['required',Rule::in(['EXCLUIR'])],'reason'=>['required','string','min:5','max:500']]);
+        return DB::transaction(function () use ($request,$table,$entity,$id,$data) {
+            $record=DB::table($table)->where('id',$id)->lockForUpdate()->first();
+            abort_unless($record,404);
+            if ($table==='advertisers') abort_if(DB::table('campaigns')->where('advertiser_id',$id)->exists(),422,'Este anunciante possui campanhas vinculadas. Exclua as campanhas primeiro.');
+            if ($table==='campaigns') DB::table('ad_events')->where('campaign_id',$id)->delete();
+            // Keep deletion evidence; do not duplicate images or private contacts in the audit.
+            $this->audit($request,$entity.'.deleted',$entity,$id,['name'=>$record->name],null,$data['reason']);
+            DB::table($table)->where('id',$id)->delete();
+            return response()->json(['message'=>'Registro excluído.']);
+        });
+    }
+
     public function advertisers()
     {
         return DB::table('advertisers')->orderBy('name')->get();

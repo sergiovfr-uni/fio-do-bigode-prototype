@@ -44,6 +44,7 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
     Route::get('/deal-invitations/{code}', [DealInvitationController::class, 'show']);
     Route::get('/campaigns/home', [CampaignController::class, 'home']);
+    Route::post('/partner-applications', [\App\Http\Controllers\Api\PartnerApplicationController::class, 'store'])->middleware('throttle:5,60');
     Route::get('/community-partners', [CommunityPartnerController::class, 'index']);
     Route::post('/campaigns/{campaign}/impression', [CampaignController::class, 'impression']);
     Route::post('/campaigns/{campaign}/click', [CampaignController::class, 'click']);
@@ -140,6 +141,11 @@ Route::prefix('v1')->group(function () {
             Route::post('/wallets/{wallet}/adjust', [AdminOperationsController::class, 'adjustWallet']);
             Route::post('/wallets/{wallet}/status', [AdminOperationsController::class, 'changeWalletStatus']);
             Route::get('/advertisers', [AdminOperationsController::class, 'advertisers']);
+            Route::get('/partner-applications', [AdminOperationsController::class, 'partnerApplications']);
+            Route::patch('/partner-applications/{application}', [AdminOperationsController::class, 'updatePartnerApplication']);
+            Route::delete('/community-partners/{partner}', [AdminOperationsController::class, 'deleteCommunityPartner']);
+            Route::delete('/advertisers/{advertiser}', [AdminOperationsController::class, 'deleteAdvertiser']);
+            Route::delete('/campaigns/{campaign}', [AdminOperationsController::class, 'deleteCampaign']);
             Route::get('/community-partners', [AdminOperationsController::class, 'communityPartners']);
             Route::post('/community-partners', [AdminOperationsController::class, 'createCommunityPartner']);
             Route::put('/community-partners/{partner}', [AdminOperationsController::class, 'updateCommunityPartner']);
