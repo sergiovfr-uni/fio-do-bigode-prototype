@@ -6,6 +6,7 @@ return [
     'allowed_origins' => [
         'https://sergiovfr-uni.github.io',
         'https://nofiodobigode.app.br',
+        'https://app.nofiodobigode.app.br',
         'https://www.nofiodobigode.app.br',
         'http://localhost',
         'http://127.0.0.1',
