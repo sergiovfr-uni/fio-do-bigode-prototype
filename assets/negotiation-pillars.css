@@ -1,0 +1,109 @@
+.dealPillarBack {
+    display: block;
+    margin: 0 0 14px;
+    padding: 10px 0;
+    border: 0;
+    background: transparent;
+    color: var(--ink, #111);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+#dealPillarsTitle,
+.dealPillarFormTitle {
+    margin: 10px 0 6px;
+}
+
+.dealPillarIntro,
+.dealPillarNote {
+    margin: 0;
+    color: #55535b;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.dealPillarList {
+    display: grid;
+    gap: 10px;
+    list-style: none;
+    margin: 18px 0 14px;
+    padding: 0;
+}
+
+.dealPillarCard {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid #e8e3da;
+    border-radius: 17px;
+    background: #f8f7f4;
+    color: #171717;
+    text-align: left;
+}
+
+.dealPillarAvailable {
+    width: 100%;
+    border-color: #dbba62;
+    background: #fff8e7;
+    font: inherit;
+    cursor: pointer;
+}
+
+.dealPillarAvailable:hover {
+    background: #fff1c9;
+}
+
+.dealPillarAvailable:focus-visible,
+.dealPillarBack:focus-visible {
+    outline: 3px solid #82610d;
+    outline-offset: 2px;
+}
+
+.dealPillarIcon {
+    display: grid;
+    flex: 0 0 40px;
+    height: 40px;
+    place-items: center;
+    border-radius: 11px;
+    background: #efeae0;
+    font-size: 21px;
+}
+
+.dealPillarAvailable .dealPillarIcon {
+    background: #f8e4aa;
+}
+
+.dealPillarCopy {
+    display: grid;
+    justify-items: start;
+    gap: 4px;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.35;
+    color: #55535b;
+}
+
+.dealPillarCopy strong {
+    font-size: 17px;
+    color: #171717;
+}
+
+.dealPillarAction,
+.dealPillarStatus {
+    margin-top: 4px;
+    font-weight: 750;
+}
+
+.dealPillarAction {
+    color: #695003;
+}
+
+.dealPillarStatus {
+    padding: 3px 8px;
+    border-radius: 20px;
+    background: #ece8df;
+    color: #51483a;
+    font-size: 12px;
+}
