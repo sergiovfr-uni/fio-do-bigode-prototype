@@ -16,10 +16,24 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
-config(['database.default'=>'sqlite', 'database.connections.sqlite'=>[
-    'driver'=>'sqlite', 'database'=>':memory:', 'prefix'=>'', 'foreign_key_constraints'=>true,
-]]);
-DB::purge('sqlite');
+$mysqlPort = getenv('PAYOFF_TEST_MYSQL_PORT');
+if ($mysqlPort !== false) {
+    // This fixture may only target the disposable GitHub Actions service.
+    if (getenv('GITHUB_ACTIONS') !== 'true' || !ctype_digit($mysqlPort)) {
+        throw new RuntimeException('MySQL payoff tests require the GitHub Actions service.');
+    }
+    config(['database.default'=>'payoff_ci', 'database.connections.payoff_ci'=>[
+        'driver'=>'mysql', 'host'=>'127.0.0.1', 'port'=>(int) $mysqlPort,
+        'database'=>'fdb_payoff_ci', 'username'=>'fdb_ci', 'password'=>'fdb_ci_only',
+        'charset'=>'utf8mb4', 'collation'=>'utf8mb4_unicode_ci', 'prefix'=>'', 'strict'=>true,
+    ]]);
+    if (Schema::hasTable('users')) throw new RuntimeException('The test database must be empty.');
+} else {
+    config(['database.default'=>'sqlite', 'database.connections.sqlite'=>[
+        'driver'=>'sqlite', 'database'=>':memory:', 'prefix'=>'', 'foreign_key_constraints'=>true,
+    ]]);
+    DB::purge('sqlite');
+}
 Storage::fake('local');
 
 foreach ([
@@ -37,7 +51,11 @@ Schema::table('deals', function (Blueprint $t) {
     $t->timestamp('paid_off_at')->nullable();
     $t->string('title')->nullable();
 });
-Schema::table('deal_documents', fn (Blueprint $t) => $t->binary('content_blob')->nullable());
+if ($mysqlPort !== false) {
+    (require __DIR__.'/../database/migrations/2026_08_25_000024_persist_deal_document_contents.php')->up();
+} else {
+    Schema::table('deal_documents', fn (Blueprint $t) => $t->binary('content_blob')->nullable());
+}
 
 function checkPayoff(bool $ok, string $message): void
 {
