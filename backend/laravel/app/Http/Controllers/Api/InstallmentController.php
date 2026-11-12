@@ -7,6 +7,7 @@ use App\Models\Deal;
 use App\Models\Installment;
 use App\Models\WalletAccount;
 use App\Services\DealEventService;
+use App\Services\EarlyPayoffGuard;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -38,9 +39,12 @@ class InstallmentController extends Controller
 
         $sha256 = hash('sha256', $binary);
         $path = 'deals/'.$deal->public_id.'/installments/'.$installment->number.'/'.$sha256;
-        Storage::disk('local')->put($path, $binary);
-
         DB::transaction(function () use ($deal, $installment, $request, $data, $path, $sha256, $binary): void {
+            $deal = Deal::whereKey($deal->id)->lockForUpdate()->firstOrFail();
+            EarlyPayoffGuard::ensureScheduleEditable($deal);
+            $installment = $deal->installments()->whereKey($installment->id)->lockForUpdate()->firstOrFail();
+            abort_unless(in_array($deal->status, ['active', 'overdue'], true) && $installment->status !== 'paid', 409,
+                'A parcela não está mais em aberto.');
             if ($installment->receipt_document_id) {
                 DB::table('deal_documents')->where('id', $installment->receipt_document_id)->delete();
             }
@@ -96,7 +100,12 @@ class InstallmentController extends Controller
         ]);
 
         DB::transaction(function () use ($deal, $installment, $data) {
-            if ($installment->status === 'paid') return;
+            $deal = Deal::whereKey($deal->id)->lockForUpdate()->firstOrFail();
+            EarlyPayoffGuard::ensureScheduleEditable($deal);
+            $installment = $deal->installments()->whereKey($installment->id)->lockForUpdate()->firstOrFail();
+            abort_unless(in_array($deal->status, ['active', 'overdue'], true)
+                && $installment->status !== 'paid' && $installment->receipt_document_id, 409,
+                'A parcela ou seu comprovante não está mais disponível para confirmação.');
 
             $installment->update([
                 'status'=>'paid',

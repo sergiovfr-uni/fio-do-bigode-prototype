@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\DealRatingController;
 use App\Http\Controllers\Api\DiditKycController;
 use App\Http\Controllers\Api\DealWitnessController;
 use App\Http\Controllers\Api\InstallmentController;
+use App\Http\Controllers\Api\EarlyPayoffController;
 use App\Http\Controllers\Api\ListingController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\WalletController;
@@ -98,6 +99,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/deals/{deal}/entry-receipt', [DealDocumentController::class, 'storeEntryReceiptBase64']);
         Route::get('/deals/{deal}/entry-receipt/download', [DealDocumentController::class, 'downloadEntryReceipt']);
         Route::post('/deals/{deal}/entry-receipt/confirm', [DealDocumentController::class, 'confirmEntryReceipt']);
+        Route::get('/deals/{deal}/early-payoff', [EarlyPayoffController::class, 'show']);
+        Route::post('/deals/{deal}/early-payoff', [EarlyPayoffController::class, 'store']);
+        Route::post('/deals/{deal}/early-payoff/{payoffId}', [EarlyPayoffController::class, 'respond'])->whereNumber('payoffId');
         Route::get('/deals/{deal}/installments', [InstallmentController::class, 'index']);
         Route::post('/deals/{deal}/installments/{installment}/receipt', [InstallmentController::class, 'storeReceipt']);
         Route::get('/deals/{deal}/installments/{installment}/receipt', [InstallmentController::class, 'downloadReceipt']);

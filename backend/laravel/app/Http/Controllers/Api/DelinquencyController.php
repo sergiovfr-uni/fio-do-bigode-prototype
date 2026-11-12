@@ -7,6 +7,7 @@ use App\Models\Deal;
 use App\Models\Installment;
 use App\Models\InstallmentDelinquencyAction;
 use App\Services\DealEventService;
+use App\Services\EarlyPayoffGuard;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 use Illuminate\Http\Request;
@@ -64,6 +65,13 @@ class DelinquencyController extends Controller
         ]);
 
         DB::transaction(function () use ($deal, $installment, $action, $data): void {
+            $deal = Deal::whereKey($deal->id)->lockForUpdate()->firstOrFail();
+            EarlyPayoffGuard::ensureScheduleEditable($deal);
+            $installment = $deal->installments()->whereKey($installment->id)->lockForUpdate()->firstOrFail();
+            abort_unless(in_array($deal->status, ['active', 'overdue'], true) && $installment->status !== 'paid',
+                409, 'A parcela não está mais em aberto.');
+            $action = $installment->delinquencyActions()->whereKey($action->id)->lockForUpdate()->firstOrFail();
+            abort_unless($action->status === 'pending', 409, 'A proposta de nova data já foi respondida.');
             $payload = $action->payload ?? [];
             $payload['seller_message'] = $data['message'] ?? null;
             $payload['responded_at'] = now()->toIso8601String();
