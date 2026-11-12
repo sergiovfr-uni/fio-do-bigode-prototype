@@ -12,6 +12,7 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Models\WalletAccount;
 use App\Services\DealEventService;
+use App\Services\EarlyPayoffGuard;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -206,10 +207,17 @@ class AdminOperationsController extends Controller
             'status'=>['required',Rule::in(['suspended','cancelled','active','overdue'])],
             'reason'=>['required','string','min:5','max:500'],
         ]);
-        abort_if(in_array($deal->status,['paid_off','closed'],true), 422, 'Uma negociação quitada ou concluída não pode ser alterada.');
-        if (in_array($data['status'],['active','overdue'],true)) abort_unless($deal->status==='suspended', 422, 'Somente uma negociação suspensa pode ser reativada.');
-        $before = ['status'=>$deal->status];
-        $deal->update(['status'=>$data['status']]);
+        $before = DB::transaction(function () use ($deal, $data) {
+            $locked = Deal::whereKey($deal->id)->lockForUpdate()->firstOrFail();
+            EarlyPayoffGuard::ensureScheduleEditable($locked);
+            abort_if(in_array($locked->status,['paid_off','closed'],true), 422, 'Uma negociação quitada ou concluída não pode ser alterada.');
+            if (in_array($data['status'],['active','overdue'],true)) {
+                abort_unless($locked->status === 'suspended', 422, 'Somente uma negociação suspensa pode ser reativada.');
+            }
+            $before = ['status'=>$locked->status];
+            $locked->update(['status'=>$data['status']]);
+            return $before;
+        });
         $this->audit($request, 'deal.status_changed', 'deal', $deal->id, $before, ['status'=>$data['status']], $data['reason']);
         return response()->json($deal->fresh());
     }
@@ -238,7 +246,13 @@ class AdminOperationsController extends Controller
         abort_if($installment->status==='paid', 422, 'Uma parcela paga não pode ter o vencimento alterado.');
         $data = $request->validate(['due_date'=>['required','date'],'reason'=>['required','string','min:5','max:500']]);
         $before = ['due_date'=>$installment->due_date?->format('Y-m-d'),'status'=>$installment->status];
-        $installment->update(['due_date'=>$data['due_date']]);
+        DB::transaction(function () use ($installment, $data): void {
+            $deal = $installment->deal()->lockForUpdate()->firstOrFail();
+            EarlyPayoffGuard::ensureScheduleEditable($deal);
+            $locked = $deal->installments()->whereKey($installment->id)->lockForUpdate()->firstOrFail();
+            abort_if($locked->status === 'paid', 422, 'Uma parcela paga não pode ter o vencimento alterado.');
+            $locked->update(['due_date'=>$data['due_date']]);
+        });
         $this->audit($request, 'installment.due_date_changed', 'installment', $installment->id, $before, $installment->fresh()->only(['due_date','status']), $data['reason']);
         return response()->json($installment->fresh());
     }
@@ -272,9 +286,10 @@ class AdminOperationsController extends Controller
         abort_if($installment->status==='paid', 422, 'Esta parcela já está paga.');
         $before = $installment->toArray();
         DB::transaction(function () use ($installment,$data): void {
-            $lockedInstallment = Installment::whereKey($installment->id)->lockForUpdate()->firstOrFail();
-            abort_if($lockedInstallment->status==='paid', 422, 'Esta parcela já está paga.');
-            $deal = $lockedInstallment->deal()->lockForUpdate()->firstOrFail();
+            $deal = $installment->deal()->lockForUpdate()->firstOrFail();
+            EarlyPayoffGuard::ensureScheduleEditable($deal);
+            $lockedInstallment = $deal->installments()->whereKey($installment->id)->lockForUpdate()->firstOrFail();
+            abort_unless($lockedInstallment->status !== 'paid' && $lockedInstallment->receipt_document_id, 422, 'Parcela indisponível para conciliação.');
             $lockedInstallment->update(['status'=>'paid','paid_at'=>now(),'external_payment_id'=>$data['external_payment_id'] ?? null]);
             $wallet = WalletAccount::firstOrCreate(['user_id'=>$deal->seller_id],['provider'=>'mock','status'=>'active','available_balance'=>0]);
             $wallet->transactions()->create([
