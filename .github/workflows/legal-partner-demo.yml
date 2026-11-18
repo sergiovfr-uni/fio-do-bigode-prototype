@@ -1,0 +1,14 @@
+name: Legal partner demo checks
+on:
+  pull_request:
+    paths: ['parceiro-juridico/painel/**', 'admin-final-adjustments.js', 'tests/legal-partner-demo.cjs', '.github/workflows/legal-partner-demo.yml']
+permissions:
+  contents: read
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node --check parceiro-juridico/painel/app.js
+      - run: node --check admin-final-adjustments.js
+      - run: node tests/legal-partner-demo.cjs
