@@ -21,6 +21,7 @@ class Subscription extends Model
     }
     public function isUsable(): bool
     {
+        if (($this->plan?->audience ?? 'user') !== 'user') return false;
         if (!in_array($this->status, ['trial', 'active'], true) || !$this->plan?->active) return false;
         if ($this->status === 'trial') {
             return $this->trial_ends_at && $this->trial_ends_at->isFuture()
