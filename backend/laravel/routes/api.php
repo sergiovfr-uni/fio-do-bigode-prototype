@@ -131,6 +131,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/legal-partner-invitations/{invitation}/resend',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'resend']);
             Route::post('/legal-partner-invitations/{invitation}/revoke',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'revoke']);
             Route::get('/legal-partners',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'partners']);
+            Route::put('/legal-partners/{partner}',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'updateProfile']);
             Route::post('/legal-partners/{partner}/activate',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'activate']);
             Route::post('/legal-partners/{partner}/status',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'status']);
             Route::get('/legal-requests',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'requests']);

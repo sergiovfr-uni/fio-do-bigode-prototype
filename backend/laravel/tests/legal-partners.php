@@ -90,3 +90,7 @@ check(denied(fn()=>$auth->verify(req(['challenge_id'=>$otp->challenge_id,'code'=
 $pendingAction=DB::table('installment_delinquency_actions')->insertGetId(['deal_id'=>$deal->id,'installment_id'=>$installment,'actor_id'=>$seller->id,'type'=>'legal_support_requested','status'=>'pending','payload'=>json_encode(['consented_at'=>now()->toIso8601String()]),'created_at'=>now(),'updated_at'=>now()]);
 check(denied(fn()=>$ops->assign(req(['legal_partner_id'=>$partner->id,'reason'=>'Attempt suspended assignment'],$admin),$pendingAction,$service)),'Suspended office cannot receive another case');
 check(denied(fn()=>$portal->revokeSharing(req([],$buyer),$deal,$pendingAction,$service),404),'Other party cannot revoke a request they did not authorize');
+
+$edited=$partner->only(['office_name','document','contact_name','oab','phone','city','state','service_regions','specialties']);
+$ops->updateProfile(req([...$edited,'office_name'=>'Corrected Office','email'=>'attacker@example.test','status'=>'active','reason'=>'Verified correction of profile'],$admin),$partner,$service);
+check($partner->fresh()->office_name==='Corrected Office' && $partner->fresh()->email==='office@example.test' && $partner->fresh()->status==='suspended','Admin can correct profile without changing verified email or activation');

@@ -12,6 +12,8 @@ class EnsureUserIsAdmin
     {
         abort_unless($request->user()?->is_admin, 403, 'Acesso exclusivo para administradores.');
 
-        return $next($request);
+        $response=$next($request);
+        $response->headers->set('Cache-Control','private, no-store');
+        return $response;
     }
 }
