@@ -6,7 +6,7 @@
 2. Escritório aceita a política e cadastra os dados usando o e-mail convidado. Estado inicial: `pending_review`. Não cria usuário comum e não libera acesso.
 3. Admin confere cadastro e libera plano `legal_partner` ativo até uma data definida. `payment_confirmed` exige referência e `payment_reviewed=true`; `manual` registra liberação sem afirmar pagamento. Ambas exigem justificativa.
 4. Escritório recebe código no e-mail para entrar no portal `/parceiro-juridico/acesso/`. Código de uso único, dez minutos, cinco tentativas; sessão jurídica de até oito horas.
-5. Admin encaminha uma solicitação com consentimento registrado a um escritório ativo e com vigência válida. Não há distribuição automática.
+5. Admin encaminha uma solicitação com consentimento registrado a um escritório ativo e com vigência válida. Não há distribuição automática. Somente pedidos com consentimento explícito `legal-case-sharing-20261118` podem compartilhar o dossiê; pedidos antigos exigem cancelamento e nova autorização no app.
 6. Parceiro consulta dossiê e documentos, registra notas privadas e status do atendimento. Não altera contratos, parcelas ou pagamentos.
 7. Reatribuição remove acesso anterior; notas privadas não passam ao novo escritório. Cancelamento pelo solicitante remove o acesso pela plataforma. Downloads já realizados não são apagados.
 

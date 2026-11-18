@@ -5,6 +5,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 class LegalPartnerService {
+ const CONSENT_VERSION='legal-case-sharing-20261118';
  const PORTAL='https://app.nofiodobigode.app.br/parceiro-juridico/acesso/';
  public function email(string $to,string $subject,string $html): bool {
   try {if(!env('RESEND_API_KEY'))return false;
@@ -17,6 +18,6 @@ class LegalPartnerService {
  }
  public function caseFor(Request $r,int $id){
   $row=DB::table('legal_referrals as r')->join('installment_delinquency_actions as a','a.id','=','r.delinquency_action_id')->where('r.id',$id)->where('r.legal_partner_id',$r->user()->id)->whereNull('r.revoked_at')->where('a.status','!=','cancelled')->select('r.*','a.deal_id','a.installment_id','a.actor_id','a.payload','a.created_at as requested_at')->first();
-  abort_unless($row && !empty(json_decode($row->payload??'{}',true)['consented_at']),404,'Solicitação não disponível para este escritório.');return $row;
+  abort_unless($row && !empty(json_decode($row->payload??'{}',true)['consented_at']) && (json_decode($row->payload??'{}',true)['consent_version']??null)===self::CONSENT_VERSION,404,'Solicitação não disponível para este escritório.');return $row;
  }
 }

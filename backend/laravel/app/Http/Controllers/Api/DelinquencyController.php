@@ -124,6 +124,7 @@ class DelinquencyController extends Controller
         $this->assertOverdue($deal, $installment);
         $data = $request->validate([
             'consent' => ['accepted'],
+            'consent_version'=>['required',\Illuminate\Validation\Rule::in([\App\Services\LegalPartnerService::CONSENT_VERSION])],
             'message' => ['nullable', 'string', 'max:1000'],
         ]);
         abort_if($installment->delinquencyActions()->where('type', 'legal_support_requested')->whereIn('status', ['pending', 'in_review'])->exists(), 422, 'Já existe uma solicitação de apoio em andamento.');
@@ -131,7 +132,7 @@ class DelinquencyController extends Controller
         $action = $installment->delinquencyActions()->create([
             'deal_id' => $deal->id, 'actor_id' => $request->user()->id, 'type' => 'legal_support_requested',
             'status' => 'pending',
-            'payload' => ['message' => $data['message'] ?? null, 'consented_at' => now()->toIso8601String()],
+            'payload' => ['message' => $data['message'] ?? null, 'consented_at' => now()->toIso8601String(),'consent_version'=>\App\Services\LegalPartnerService::CONSENT_VERSION,'shared_data'=>['agreement','documents','payments','history'],'consent_ip_hash'=>hash('sha256',(string)$request->ip())],
         ]);
         $events->record($deal, $request->user()->id, 'legal_support_requested', ['installment_id' => $installment->id, 'action_id' => $action->id]);
         $events->notify($deal, $deal->seller_id, 'legal_support_requested', 'Solicitação registrada', 'Seu pedido de apoio jurídico foi registrado e aguarda encaminhamento a um parceiro.', ['deal_id' => $deal->id, 'installment_id' => $installment->id]);

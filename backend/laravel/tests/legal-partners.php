@@ -49,7 +49,7 @@ check(httpCall('GET','/admin/legal-partners',$partnerToken)->getStatusCode()===4
 $userToken=$seller->createToken('test-user')->plainTextToken;check(httpCall('GET','/legal/me',$userToken)->getStatusCode()===403,'Consumer token cannot enter legal portal');
 $deal=Deal::create(['seller_id'=>$seller->id,'buyer_id'=>$buyer->id,'title'=>'Test Deal','total_amount'=>12000,'down_payment'=>2000,'status'=>'active','formalized_at'=>now()]);
 $installment=DB::table('installments')->insertGetId(['deal_id'=>$deal->id,'number'=>1,'due_date'=>now()->subDay()->toDateString(),'amount'=>2000,'status'=>'pending']);
-$action=DB::table('installment_delinquency_actions')->insertGetId(['deal_id'=>$deal->id,'installment_id'=>$installment,'actor_id'=>$seller->id,'type'=>'legal_support_requested','status'=>'pending','payload'=>json_encode(['consented_at'=>now()->toIso8601String(),'message'=>'Please help']),'created_at'=>now(),'updated_at'=>now()]);
+$action=DB::table('installment_delinquency_actions')->insertGetId(['deal_id'=>$deal->id,'installment_id'=>$installment,'actor_id'=>$seller->id,'type'=>'legal_support_requested','status'=>'pending','payload'=>json_encode(['consent_version'=>LegalPartnerService::CONSENT_VERSION,'consented_at'=>now()->toIso8601String(),'message'=>'Please help']),'created_at'=>now(),'updated_at'=>now()]);
 DB::table('deal_events')->insert(['deal_id'=>$deal->id,'actor_id'=>$seller->id,'type'=>'terms_accepted','payload'=>json_encode(['private_key'=>'DO NOT EXPOSE']),'created_at'=>now(),'updated_at'=>now()]);
 $doc=DB::table('deal_documents')->insertGetId(['deal_id'=>$deal->id,'uploaded_by'=>$seller->id,'type'=>'contract','storage_path'=>'absent/test.pdf','original_name'=>'contract.pdf','mime_type'=>'application/pdf','sha256'=>str_repeat('a',64),'content_blob'=>'TEST-PDF','created_at'=>now(),'updated_at'=>now()]);
 check(count($portal->cases(req([],$partner)))===0,'No cases are visible before explicit admin assignment');
@@ -87,10 +87,13 @@ DB::table('legal_login_challenges')->where('id',$otp->challenge_id)->update(['at
 check(denied(fn()=>$auth->verify(req(['challenge_id'=>$otp->challenge_id,'code'=>$realCode]),$service)),'Correct OTP is rejected after failed-attempt limit');
 $otp=$auth->requestCode(req(['email'=>$other->email]),$service)->getData();DB::table('legal_login_challenges')->where('id',$otp->challenge_id)->update(['expires_at'=>now()->subSecond()]);
 check(denied(fn()=>$auth->verify(req(['challenge_id'=>$otp->challenge_id,'code'=>'123456']),$service)),'Expired login code is rejected');
-$pendingAction=DB::table('installment_delinquency_actions')->insertGetId(['deal_id'=>$deal->id,'installment_id'=>$installment,'actor_id'=>$seller->id,'type'=>'legal_support_requested','status'=>'pending','payload'=>json_encode(['consented_at'=>now()->toIso8601String()]),'created_at'=>now(),'updated_at'=>now()]);
+$pendingAction=DB::table('installment_delinquency_actions')->insertGetId(['deal_id'=>$deal->id,'installment_id'=>$installment,'actor_id'=>$seller->id,'type'=>'legal_support_requested','status'=>'pending','payload'=>json_encode(['consent_version'=>LegalPartnerService::CONSENT_VERSION,'consented_at'=>now()->toIso8601String()]),'created_at'=>now(),'updated_at'=>now()]);
 check(denied(fn()=>$ops->assign(req(['legal_partner_id'=>$partner->id,'reason'=>'Attempt suspended assignment'],$admin),$pendingAction,$service)),'Suspended office cannot receive another case');
 check(denied(fn()=>$portal->revokeSharing(req([],$buyer),$deal,$pendingAction,$service),404),'Other party cannot revoke a request they did not authorize');
 
 $edited=$partner->only(['office_name','document','contact_name','oab','phone','city','state','service_regions','specialties']);
 $ops->updateProfile(req([...$edited,'office_name'=>'Corrected Office','email'=>'attacker@example.test','status'=>'active','reason'=>'Verified correction of profile'],$admin),$partner,$service);
 check($partner->fresh()->office_name==='Corrected Office' && $partner->fresh()->email==='office@example.test' && $partner->fresh()->status==='suspended','Admin can correct profile without changing verified email or activation');
+
+$legacyAction=DB::table('installment_delinquency_actions')->insertGetId(['deal_id'=>$deal->id,'installment_id'=>$installment,'actor_id'=>$seller->id,'type'=>'legal_support_requested','status'=>'pending','payload'=>json_encode(['consented_at'=>now()->toIso8601String()]),'created_at'=>now(),'updated_at'=>now()]);
+check(denied(fn()=>$ops->assign(req(['legal_partner_id'=>$other->id,'reason'=>'Test legacy authorization'],$admin),$legacyAction,$service)),'Old generic consent cannot expose the full legal dossier');
