@@ -23,6 +23,7 @@ Schema::create('listings',function(Blueprint $t){$t->id();$t->uuid('public_id')-
 Schema::create('admin_audit_logs',function(Blueprint $t){$t->id();$t->unsignedBigInteger('admin_user_id')->nullable();$t->string('action');$t->string('entity_type');$t->string('entity_id');$t->json('before_data')->nullable();$t->json('after_data')->nullable();$t->string('reason')->nullable();$t->string('ip_hash')->nullable();$t->string('user_agent_hash')->nullable();$t->timestamps();});
 (require __DIR__.'/../database/migrations/2026_11_18_000038_admin_listings_and_categories.php')->up();
 (require __DIR__.'/../database/migrations/2026_11_18_000039_preserve_legacy_listing_categories.php')->up();
+(require __DIR__.'/../database/migrations/2026_11_18_000040_optional_admin_listing_price.php')->up();
 function check($ok,$message){if(!$ok)throw new RuntimeException($message);echo "PASS: $message\n";}
 function req($data,$user){$r=Request::create('/','POST',$data);$r->setUserResolver(fn()=>$user);return $r;}
 function rejected($fn){try{$fn();return false;}catch(Illuminate\Validation\ValidationException $e){return true;}catch(Symfony\Component\HttpKernel\Exception\HttpException $e){return $e->getStatusCode()===422;}}
@@ -53,3 +54,16 @@ check(!$categories->index()->contains('name','Ferramentas'),'Disabled category i
 $middleware=new App\Http\Middleware\EnsureUserIsAdmin;
 try{$middleware->handle(req([],$member),fn()=>response('ok'));throw new RuntimeException('Member passed admin guard');}catch(Symfony\Component\HttpKernel\Exception\HttpException $e){check($e->getStatusCode()===403,'Ordinary member cannot access admin mutations');}
 check(DB::table('admin_audit_logs')->where('entity_type','listing_category')->count()===3,'Category writes are audited');
+
+$withoutPrice=$data;unset($withoutPrice['price']);
+$id=$ops->createListing(req($withoutPrice,$admin))->getData()->id;
+$promotion=Listing::findOrFail($id);
+check($promotion->price===null && $promotion->seller_id===null,'Administrative promotion can be published without price');
+check($ops->createListing(req([...$data,'price'=>null],$admin))->getData()->price===null,'Explicit empty administrative price remains null');
+$ops->updateListing(req([...$data,'price'=>null],$admin),$listing->fresh());
+check($listing->fresh()->price===null,'Existing administrative price can be removed');
+check(rejected(fn()=>$ops->createListing(req([...$data,'price'=>0],$admin))),'Zero is not used as a fake absent price');
+$member->forceFill(['kyc_status'=>'verified'])->save();
+check(rejected(fn()=>$ops->createListing(req([...$withoutPrice,'seller_id'=>$member->id],$admin))),'User-linked listing still requires price');
+$ownedId=$ops->createListing(req([...$data,'seller_id'=>$member->id],$admin))->getData()->id;
+check(rejected(fn()=>$ops->updateListing(req([...$data,'seller_id'=>null,'price'=>null],$admin),Listing::findOrFail($ownedId))),'Clearing seller in update cannot bypass required user price');
