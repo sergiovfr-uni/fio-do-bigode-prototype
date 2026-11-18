@@ -502,13 +502,14 @@ class AdminOperationsController extends Controller
 
     private function validateListing(Request $request, ?Listing $listing = null): array
     {
+        $administrative = $listing ? $listing->seller_id === null : !$request->filled('seller_id');
         $data = $request->validate([
             'seller_id'=>['nullable','integer','exists:users,id'],
             'category'=>['required','string','max:60'],
             'title'=>['required','string','max:180'],
             'description'=>['required','string','max:5000'],
             'cover_image'=>['nullable','string','max:900000'],
-            'price'=>['required','numeric','min:0.01'],
+            'price'=>[$administrative ? 'nullable' : 'required','numeric','min:0.01'],
             'accepts_trade'=>['sometimes','boolean'],
             'status'=>['sometimes',Rule::in(['draft','published','archived'])],
         ]);
