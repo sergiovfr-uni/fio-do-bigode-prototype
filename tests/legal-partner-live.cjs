@@ -1,0 +1,23 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert'),path=require('path');
+const root=path.resolve(__dirname,'..'),html=fs.readFileSync(root+'/parceiro-juridico/acesso/index.html','utf8'),script=fs.readFileSync(root+'/parceiro-juridico/acesso/app.js','utf8');
+const nodes={},storage=new Map(),calls=[];let denied=false,currentStatus='received';
+const element=id=>({id,hidden:false,value:'',textContent:'',innerHTML:'',events:{},dataset:{},classList:{toggle(){}},addEventListener(k,f){this.events[k]=f},querySelector(){return {focus(){}}},focus(){},remove(){},click(){}});
+for(const m of html.matchAll(/id="([^"]+)"/g))nodes[m[1]]=element(m[1]);
+const views=['requests','case','office'].map(id=>nodes[id]),nav=['requests','office'].map(view=>({...element('nav'),dataset:{view}})),tabs=['summary','documents','payments','history'].map(tab=>({...element('tab'),dataset:{tab}}));
+const dossier=()=>({case:{id:1,status:currentStatus,assigned_at:'2026-11-18',requested_at:'2026-11-17',consented_at:'2026-11-17',message:'Please help'},deal:{id:1,public_id:'TEST-1',title:'Test agreement',description:'Test',status:'active',total_amount:1000,down_payment:0,monthly_interest:0,formalized_at:'2026-11-01'},parties:[{role:'seller',name:'Test Person',email:'test@example.test'}],installments:[{number:1,amount:1000,status:'pending',due_date:'2026-11-01'}],documents:[],signatures:[],history:[],notes:[{body:'<script>test</script>',created_at:'2026-11-18'}],attendance:[]});
+const docEvents={};const context={console,Blob,URL:{createObjectURL(){return 'blob:test'},revokeObjectURL(){}},document:{getElementById(id){assert(nodes[id],id);return nodes[id]},querySelectorAll(s){return s==='.view'?views:s==='[data-view]'?nav:s==='[data-tab]'?tabs:[]},addEventListener(k,f){docEvents[k]=f},createElement(){return element('a')},body:{appendChild(){}}},sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},window:{scrollTo(){}},setTimeout(){return 1},clearTimeout(){},fetch:async(url,opt)=>{calls.push({url,opt});const p=url.replace('https://api.nofiodobigode.app.br/api/v1/legal','');let body={};let status=200;
+ if(p==='/auth/code')body={challenge_id:'test-challenge',message:'Code sent'};
+ else if(p==='/auth/verify')body={token:'TEST_TOKEN'};
+ else {assert.strictEqual(opt.headers.Authorization,'Bearer TEST_TOKEN');if(denied){status=403;body={message:'Access suspended'}}else if(p==='/me')body={office_name:'Test office',email:'office@example.test',plan_snapshot:{name:'Test plan'}};else if(p==='/cases')body=[{id:1,title:'Test agreement',public_id:'TEST-1',requester_name:'Test Person',status:currentStatus}];else if(p==='/cases/1')body=dossier();else if(p==='/cases/1/status'){currentStatus=JSON.parse(opt.body).status;body={message:'Updated'}}else if(p==='/cases/1/notes')body={message:'Saved'};else if(p==='/logout')status=204;else throw Error('Unexpected '+p)}
+ return {ok:status<400,status,json:async()=>body};}};
+vm.createContext(context);vm.runInContext(script,context);const event={preventDefault(){}};
+async function settle(){for(let i=0;i<20;i++)await Promise.resolve()}
+(async()=>{
+ assert.strictEqual(calls.length,0,'No real case data requested without a session');nodes.email.value='office@example.test';await nodes.emailForm.events.submit(event);assert(nodes.emailForm.hidden&&!nodes.codeForm.hidden);
+ nodes.code.value='123456';await nodes.codeForm.events.submit(event);assert(nodes.login.hidden&&!nodes.workspace.hidden);assert(nodes.caseList.innerHTML.includes('Test agreement'));assert.strictEqual(storage.get('fdb_legal_session'),'TEST_TOKEN');
+ docEvents.click({target:{closest:s=>s==='[data-case]'?{dataset:{case:'1'}}:null}});await settle();assert(nodes.caseTitle.textContent==='Test agreement');assert(nodes.notes.innerHTML.includes('&lt;script&gt;'));assert(!nodes.notes.innerHTML.includes('<script>'));
+ const before=nodes.caseContent.innerHTML;nodes.attendance.value='closed';await nodes.saveStatus.events.click();assert(nodes.caseStatus.innerHTML.includes('Encerrado'));assert.strictEqual(before,nodes.caseContent.innerHTML,'Status does not change agreement conditions');
+ denied=true;await nodes.refresh.events.click();assert(!nodes.login.hidden&&nodes.workspace.hidden);assert(!storage.has('fdb_legal_session'));assert.strictEqual(nodes.notes.textContent,'');assert.strictEqual(nodes.caseTitle.textContent,'');
+ assert(calls.every(c=>c.opt.cache==='no-store'),'Private requests are never cacheable');
+ console.log('PASS: passwordless login, authorized requests, real-mode case rendering, note escaping, separate attendance status, revoked-session clearing and no-store requests');
+})().catch(e=>{console.error(e);process.exit(1)});
