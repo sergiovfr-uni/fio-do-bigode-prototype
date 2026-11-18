@@ -1,0 +1,15 @@
+<?php
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+return new class extends Migration {
+ public function up(): void {
+  Schema::create('legal_partners',function(Blueprint $t){$t->id();$t->string('office_name',180);$t->string('document',40);$t->string('contact_name',160);$t->string('oab',80);$t->string('email')->unique();$t->string('phone',40);$t->string('city',100);$t->string('state',2);$t->string('service_regions',1000);$t->string('specialties',1000);$t->text('notes')->nullable();$t->string('status',24)->default('pending_review')->index();$t->foreignId('plan_id')->nullable()->constrained('plans');$t->json('plan_snapshot')->nullable();$t->string('activation_method',24)->nullable();$t->string('payment_reference')->nullable();$t->timestamp('payment_confirmed_at')->nullable();$t->timestamp('activated_at')->nullable();$t->timestamp('access_until')->nullable();$t->timestamp('consented_at');$t->string('consent_version',30);$t->timestamps();});
+  Schema::create('legal_partner_invitations',function(Blueprint $t){$t->id();$t->string('email');$t->string('office_name',180);$t->string('token_hash',64)->unique();$t->foreignId('created_by')->constrained('users');$t->foreignId('legal_partner_id')->nullable()->constrained('legal_partners');$t->timestamp('expires_at');$t->timestamp('used_at')->nullable();$t->timestamp('revoked_at')->nullable();$t->string('delivery_status',20)->default('pending');$t->timestamps();$t->index(['email','used_at']);});
+  Schema::create('legal_login_challenges',function(Blueprint $t){$t->uuid('id')->primary();$t->foreignId('legal_partner_id')->constrained('legal_partners')->cascadeOnDelete();$t->string('code_hash',64);$t->unsignedTinyInteger('attempts')->default(0);$t->timestamp('expires_at');$t->timestamps();});
+  Schema::create('legal_referrals',function(Blueprint $t){$t->id();$t->foreignId('delinquency_action_id')->unique()->constrained('installment_delinquency_actions');$t->foreignId('legal_partner_id')->constrained('legal_partners');$t->foreignId('assigned_by')->constrained('users');$t->string('status',24)->default('received');$t->timestamp('assigned_at');$t->timestamp('revoked_at')->nullable();$t->timestamps();});
+  Schema::create('legal_case_notes',function(Blueprint $t){$t->id();$t->foreignId('legal_referral_id')->constrained('legal_referrals');$t->foreignId('legal_partner_id')->constrained('legal_partners');$t->text('body');$t->timestamps();});
+  Schema::create('legal_activity_logs',function(Blueprint $t){$t->id();$t->foreignId('legal_partner_id')->nullable()->constrained('legal_partners');$t->foreignId('legal_referral_id')->nullable()->constrained('legal_referrals');$t->string('actor_type',20);$t->unsignedBigInteger('actor_id')->nullable();$t->string('action',80);$t->json('metadata')->nullable();$t->string('ip_hash',64)->nullable();$t->timestamps();});
+ }
+ public function down(): void {foreach(['legal_activity_logs','legal_case_notes','legal_referrals','legal_login_challenges','legal_partner_invitations','legal_partners'] as $table)Schema::dropIfExists($table);}
+};

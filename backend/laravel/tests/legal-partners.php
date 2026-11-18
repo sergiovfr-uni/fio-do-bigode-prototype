@@ -1,0 +1,74 @@
+<?php
+require __DIR__.'/../vendor/autoload.php';
+$app=require __DIR__.'/../bootstrap/app.php';$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+use Illuminate\Support\Facades\DB;use Illuminate\Support\Facades\Schema;use Illuminate\Support\Facades\Http;use Illuminate\Support\Facades\Storage;use Illuminate\Database\Schema\Blueprint;use Illuminate\Http\Request;use App\Models\User;use App\Models\Plan;use App\Models\LegalPartner;use App\Models\Deal;use App\Services\LegalPartnerService;use App\Http\Controllers\Api\LegalPartnerAdminController;use App\Http\Controllers\Api\LegalPartnerAuthController;use App\Http\Controllers\Api\LegalPartnerPortalController;
+if(getenv('LEGAL_TEST_MYSQL_PORT')!==false && getenv('LEGAL_TEST_MYSQL_PORT')!==''){$port=getenv('LEGAL_TEST_MYSQL_PORT');if(getenv('GITHUB_ACTIONS')!=='true'||!ctype_digit($port))throw new RuntimeException('Disposable CI only');config(['database.default'=>'legal_ci','database.connections.legal_ci'=>['driver'=>'mysql','host'=>'127.0.0.1','port'=>(int)$port,'database'=>'fdb_legal_ci','username'=>'fdb_ci','password'=>'fdb_ci_only','charset'=>'utf8mb4','collation'=>'utf8mb4_unicode_ci','prefix'=>'','strict'=>true]]);if(Schema::hasTable('users'))throw new RuntimeException('Expected empty CI database');}else{config(['database.default'=>'sqlite','database.connections.sqlite'=>['driver'=>'sqlite','database'=>':memory:','prefix'=>'','foreign_key_constraints'=>true]]);DB::purge('sqlite');}
+config(['cache.default'=>'array','session.driver'=>'array']);Storage::fake('local');Http::fake(['api.resend.com/*'=>Http::response(['id'=>'test-email'],200)]);
+foreach(['2026_08_19_000001_create_mvp_core_tables.php','2026_08_19_000002_create_password_reset_and_documents_tables.php','2026_08_19_000003_create_installments_and_wallet_tables.php','2026_08_20_000005_create_personal_access_tokens_table.php','2026_08_20_000008_create_notifications_and_deal_events.php','2026_08_25_000018_create_deal_electronic_signatures_table.php','2026_08_27_000032_create_installment_delinquency_actions.php','2026_11_18_000041_add_plan_audience.php']as$f)(require __DIR__.'/../database/migrations/'.$f)->up();
+Schema::table('users',function(Blueprint $t){$t->boolean('is_admin')->default(false);$t->string('account_status')->default('active');$t->string('city')->nullable();$t->string('state')->nullable();});
+Schema::table('plans',function(Blueprint $t){$t->boolean('complimentary')->default(false);$t->boolean('admin_only')->default(false);});
+Schema::table('deals',function(Blueprint $t){$t->string('title')->nullable();$t->text('description')->nullable();$t->timestamp('formalized_at')->nullable();$t->date('first_due_date')->nullable();$t->timestamp('entry_confirmed_at')->nullable();$t->unsignedBigInteger('entry_receipt_document_id')->nullable();});
+Schema::table('installments',function(Blueprint $t){$t->unsignedBigInteger('receipt_document_id')->nullable();});
+Schema::table('deal_documents',function(Blueprint $t){$t->binary('content_blob')->nullable();});
+Schema::create('admin_audit_logs',function(Blueprint $t){$t->id();$t->unsignedBigInteger('admin_user_id')->nullable();$t->string('action');$t->string('entity_type');$t->string('entity_id');$t->json('before_data')->nullable();$t->json('after_data')->nullable();$t->string('reason')->nullable();$t->string('ip_hash')->nullable();$t->string('user_agent_hash')->nullable();$t->timestamps();});
+(require __DIR__.'/../database/migrations/2026_11_18_000042_create_legal_partner_operations.php')->up();
+function check($ok,$text){if(!$ok)throw new RuntimeException($text);echo "PASS: $text\n";}
+function req(array $data=[],?object $user=null){$r=Request::create('/','POST',$data);$r->setUserResolver(fn()=>$user);return $r;}
+function denied(callable $fn,int $status=422){try{$fn();return false;}catch(Illuminate\Validation\ValidationException $e){return $status===422;}catch(Symfony\Component\HttpKernel\Exception\HttpException $e){return $e->getStatusCode()===$status;}}
+function httpCall(string $method,string $path,?string $token=null,array $body=[]){app('auth')->forgetGuards();$r=Request::create('/api/v1'.$path,$method,[],[],[],['HTTP_ACCEPT'=>'application/json','CONTENT_TYPE'=>'application/json',...($token?['HTTP_AUTHORIZATION'=>'Bearer '.$token]:[])],json_encode($body));$k=app(Illuminate\Contracts\Http\Kernel::class);return $k->handle($r);}
+$admin=User::create(['name'=>'Test Admin','cpf'=>'00000000001','email'=>'admin@example.test','phone'=>'3100000000','password'=>bcrypt('test-only')]);$admin->forceFill(['is_admin'=>true])->save();
+$seller=User::create(['name'=>'Test Seller','cpf'=>'00000000002','email'=>'seller@example.test','phone'=>'3100000001','password'=>bcrypt('test-only')]);
+$buyer=User::create(['name'=>'Test Buyer','cpf'=>'00000000003','email'=>'buyer@example.test','phone'=>'3100000002','password'=>bcrypt('test-only')]);
+$plan=Plan::create(['slug'=>'legal','name'=>'Legal','audience'=>'legal_partner','monthly_price'=>149,'active'=>true]);$consumer=Plan::create(['slug'=>'consumer','name'=>'Consumer','audience'=>'user','active'=>true]);
+$service=new LegalPartnerService;$ops=new LegalPartnerAdminController;$auth=new LegalPartnerAuthController;$portal=new LegalPartnerPortalController;
+$inv=$ops->invite(req(['email'=>'office@example.test','office_name'=>'Test Office','expires_in_days'=>7],$admin),$service)->getData();parse_str(parse_url($inv->invite_url,PHP_URL_QUERY),$q);$token=$q['convite'];
+check($inv->delivery_status==='sent' && strlen($token)===64,'Individual invitation is generated and delivered');
+check(DB::table('legal_partner_invitations')->first()->token_hash!==$token,'Only invitation token hash is stored');
+check($ops->validateInvite($token)->getData()->email==='office@example.test','Invitation reveals invited office only with valid token');
+$appData=['invitation_token'=>$token,'office_name'=>'Test Office','document'=>'TEST DOCUMENT','contact_name'=>'Test Contact','oab'=>'TEST OAB','email'=>'office@example.test','phone'=>'3100000004','city'=>'BH','state'=>'MG','service_regions'=>'MG','specialties'=>'Contracts','notes'=>'Test profile','consent'=>true];
+check(denied(fn()=>$ops->apply(req([...$appData,'email'=>'another@example.test']),$service)),'Invitation is bound to recipient email');
+check(denied(fn()=>$ops->apply(req([...$appData,'consent'=>false]),$service)),'Registration requires explicit consent');
+$ops->apply(req($appData),$service);$partner=LegalPartner::first();
+check($partner->status==='pending_review' && !$partner->hasAccess(),'Registration is pending and does not activate access');
+check(User::count()===3,'Legal registration creates no consumer/admin user');
+check(denied(fn()=>$ops->apply(req($appData),$service)),'Invitation is single use');
+Http::assertSentCount(1);$pending=$auth->requestCode(req(['email'=>$partner->email]),$service)->getData();Http::assertSentCount(1);
+check(denied(fn()=>$auth->verify(req(['challenge_id'=>$pending->challenge_id,'code'=>'123456']),$service)),'Pending office cannot log in');
+$activation=['plan_id'=>$plan->id,'access_until'=>now()->addDays(30)->toIso8601String(),'activation_method'=>'manual','reason'=>'Profile reviewed and manually approved'];
+check(denied(fn()=>$ops->activate(req([...$activation,'plan_id'=>$consumer->id],$admin),$partner,$service)),'Consumer plan cannot activate a legal office');
+check(denied(fn()=>$ops->activate(req([...$activation,'activation_method'=>'payment_confirmed'],$admin),$partner,$service)),'Paid activation requires payment confirmation and reference');
+$ops->activate(req($activation,$admin),$partner,$service);$partner=$partner->fresh();
+check($partner->hasAccess() && $partner->payment_confirmed_at===null,'Manual activation grants dated access without inventing payment');
+$login=$auth->requestCode(req(['email'=>$partner->email]),$service)->getData();$sent=Http::recorded(fn($request)=>str_contains($request['subject'],'Código de acesso'))->last();preg_match('/<b>([0-9]{6})<\/b>/',$sent[0]['html'],$match);$code=$match[1];
+check(denied(fn()=>$auth->verify(req(['challenge_id'=>$login->challenge_id,'code'=>$code==='000000'?'111111':'000000']),$service)),'Wrong OTP is rejected');
+$session=$auth->verify(req(['challenge_id'=>$login->challenge_id,'code'=>$code]),$service)->getData();$partnerToken=$session->token;
+check(denied(fn()=>$auth->verify(req(['challenge_id'=>$login->challenge_id,'code'=>$code]),$service)),'OTP cannot be reused');
+check(httpCall('GET','/legal/me',$partnerToken)->getStatusCode()===200,'Legal session authenticates through actual middleware');
+check(httpCall('GET','/me',$partnerToken)->getStatusCode()===403,'Legal token cannot enter consumer API');
+check(httpCall('GET','/admin/legal-partners',$partnerToken)->getStatusCode()===403,'Legal token cannot enter admin API');
+$userToken=$seller->createToken('test-user')->plainTextToken;check(httpCall('GET','/legal/me',$userToken)->getStatusCode()===403,'Consumer token cannot enter legal portal');
+$deal=Deal::create(['seller_id'=>$seller->id,'buyer_id'=>$buyer->id,'title'=>'Test Deal','total_amount'=>12000,'down_payment'=>2000,'status'=>'active','formalized_at'=>now()]);
+$installment=DB::table('installments')->insertGetId(['deal_id'=>$deal->id,'number'=>1,'due_date'=>now()->subDay()->toDateString(),'amount'=>2000,'status'=>'pending']);
+$action=DB::table('installment_delinquency_actions')->insertGetId(['deal_id'=>$deal->id,'installment_id'=>$installment,'actor_id'=>$seller->id,'type'=>'legal_support_requested','status'=>'pending','payload'=>json_encode(['consented_at'=>now()->toIso8601String(),'message'=>'Please help']),'created_at'=>now(),'updated_at'=>now()]);
+DB::table('deal_events')->insert(['deal_id'=>$deal->id,'actor_id'=>$seller->id,'type'=>'terms_accepted','payload'=>json_encode(['private_key'=>'DO NOT EXPOSE']),'created_at'=>now(),'updated_at'=>now()]);
+$doc=DB::table('deal_documents')->insertGetId(['deal_id'=>$deal->id,'uploaded_by'=>$seller->id,'type'=>'contract','storage_path'=>'absent/test.pdf','original_name'=>'contract.pdf','mime_type'=>'application/pdf','sha256'=>str_repeat('a',64),'content_blob'=>'TEST-PDF','created_at'=>now(),'updated_at'=>now()]);
+check(count($portal->cases(req([],$partner)))===0,'No cases are visible before explicit admin assignment');
+$assigned=$ops->assign(req(['legal_partner_id'=>$partner->id,'reason'=>'Authorized request assigned'],$admin),$action,$service)->getData();$ref=$assigned->referral_id;
+$snapshot=DB::table('deals')->where('id',$deal->id)->first();$installmentSnapshot=DB::table('installments')->find($installment);
+$dossier=$portal->dossier(req([],$partner),$ref,$service)->getData();
+check(count($dossier->documents)===1 && count($dossier->installments)===1 && !str_contains(json_encode($dossier),'DO NOT EXPOSE'),'Assigned dossier exposes scoped records without raw private event payloads');
+check(httpCall('GET','/legal/cases/'.$ref.'/documents/'.$doc,$partnerToken)->getStatusCode()===200,'Authorized original document download works through middleware');
+$portal->status(req(['status'=>'closed'],$partner),$ref,$service);$portal->note(req(['body'=>'Office private note'],$partner),$ref,$service);
+check(DB::table('deals')->where('id',$deal->id)->first()==$snapshot && DB::table('installments')->find($installment)==$installmentSnapshot,'Legal status and notes never change agreements or installments');
+$other=LegalPartner::create([...$partner->only(['office_name','document','contact_name','oab','phone','city','state','service_regions','specialties','consent_version']),'email'=>'other@example.test','status'=>'active','plan_id'=>$plan->id,'access_until'=>now()->addDays(10),'consented_at'=>now()]);
+check(denied(fn()=>$portal->dossier(req([],$other),$ref,$service),404),'Another office cannot read the case');
+$ops->assign(req(['legal_partner_id'=>$other->id,'reason'=>'Reassigned by admin'],$admin),$action,$service);
+check(denied(fn()=>$portal->document(req([],$partner),$ref,$doc,$service),404),'Reassignment immediately removes former office access');
+check(count($portal->dossier(req([],$other),$ref,$service)->getData()->notes)===0,'New office cannot read private notes of former office');
+$portal->revokeSharing(req([],$seller),$deal,$action,$service);
+check(denied(fn()=>$portal->dossier(req([],$other),$ref,$service),404),'User withdrawal removes office access');
+check(denied(fn()=>$ops->assign(req(['legal_partner_id'=>$partner->id,'reason'=>'Attempt reopen'],$admin),$action,$service)),'Cancelled consent cannot be reassigned');
+$partner->update(['access_until'=>now()->subSecond()]);check(httpCall('GET','/legal/me',$partnerToken)->getStatusCode()===403,'Expired office access is blocked on every request');
+$ops->activate(req([...$activation,'activation_method'=>'payment_confirmed','payment_reference'=>'TEST-RECEIPT','payment_reviewed'=>true],$admin),$partner,$service);check($partner->fresh()->payment_confirmed_at!==null,'Confirmed payment activation records reference and date');
+$ops->status(req(['status'=>'suspended','reason'=>'Admin suspension test'],$admin),$partner,$service);check($partner->tokens()->count()===0,'Suspension revokes existing office sessions');
+check(DB::table('admin_audit_logs')->count()>0 && DB::table('legal_activity_logs')->where('action','legal.document_downloaded')->exists(),'Admin decisions and sensitive document reads are audited');

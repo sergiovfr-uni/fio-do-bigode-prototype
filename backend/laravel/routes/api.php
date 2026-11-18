@@ -34,6 +34,20 @@ Route::get('/health', function () {
 });
 
 Route::prefix('v1')->group(function () {
+    Route::get('/legal-partner-invitations/{token}', [\App\Http\Controllers\Api\LegalPartnerAdminController::class,'validateInvite'])->middleware('throttle:20,1');
+    Route::post('/legal-partner-applications', [\App\Http\Controllers\Api\LegalPartnerAdminController::class,'apply'])->middleware('throttle:5,60');
+    Route::post('/legal/auth/code', [\App\Http\Controllers\Api\LegalPartnerAuthController::class,'requestCode'])->middleware('throttle:5,1');
+    Route::post('/legal/auth/verify', [\App\Http\Controllers\Api\LegalPartnerAuthController::class,'verify'])->middleware('throttle:10,1');
+    Route::middleware(['auth:sanctum','legal'])->prefix('legal')->group(function(){
+        Route::post('/deals/{deal}/legal-support/{action}/cancel', [\App\Http\Controllers\Api\LegalPartnerPortalController::class,'revokeSharing']);
+        Route::get('/me',[\App\Http\Controllers\Api\LegalPartnerPortalController::class,'me']);
+        Route::post('/logout',[\App\Http\Controllers\Api\LegalPartnerAuthController::class,'logout']);
+        Route::get('/cases',[\App\Http\Controllers\Api\LegalPartnerPortalController::class,'cases']);
+        Route::get('/cases/{referral}',[\App\Http\Controllers\Api\LegalPartnerPortalController::class,'dossier']);
+        Route::post('/cases/{referral}/status',[\App\Http\Controllers\Api\LegalPartnerPortalController::class,'status']);
+        Route::post('/cases/{referral}/notes',[\App\Http\Controllers\Api\LegalPartnerPortalController::class,'note']);
+        Route::get('/cases/{referral}/documents/{document}',[\App\Http\Controllers\Api\LegalPartnerPortalController::class,'document']);
+    });
     Route::post('/admin/auth/login', [AdminAuthController::class, 'login'])->middleware('throttle:5,1');
     Route::post('/admin/auth/2fa/verify', [AdminAuthController::class, 'verifyTwoFactor'])->middleware('throttle:10,1');
     Route::post('/kyc/didit/webhook', [DiditKycController::class, 'webhook'])->middleware('throttle:120,1');
@@ -54,7 +68,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/witness-invitations/{code}', [WitnessInvitationController::class, 'show'])->middleware('throttle:30,1');
     Route::get('/witness-invitations/{code}/document', [WitnessInvitationController::class, 'download'])->middleware('throttle:10,1');
 
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum','member'])->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::patch('/me/contract-qualification', [AuthController::class, 'updateQualification']);
         Route::get('/users/lookup', [AuthController::class, 'lookupUser'])->middleware('throttle:20,1');
@@ -112,6 +126,15 @@ Route::prefix('v1')->group(function () {
         Route::prefix('admin')->middleware('admin')->group(function () {
             Route::get('/auth/me', [AdminAuthController::class, 'me']);
             Route::post('/auth/logout', [AdminAuthController::class, 'logout']);
+            Route::get('/legal-partner-invitations',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'invitations']);
+            Route::post('/legal-partner-invitations',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'invite']);
+            Route::post('/legal-partner-invitations/{invitation}/resend',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'resend']);
+            Route::post('/legal-partner-invitations/{invitation}/revoke',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'revoke']);
+            Route::get('/legal-partners',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'partners']);
+            Route::post('/legal-partners/{partner}/activate',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'activate']);
+            Route::post('/legal-partners/{partner}/status',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'status']);
+            Route::get('/legal-requests',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'requests']);
+            Route::post('/legal-requests/{action}/assign',[\App\Http\Controllers\Api\LegalPartnerAdminController::class,'assign']);
             Route::get('/dashboard', [AdminController::class, 'dashboard']);
             Route::get('/users', [AdminController::class, 'users']);
             Route::get('/deals', [AdminController::class, 'deals']);

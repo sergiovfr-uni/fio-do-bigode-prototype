@@ -1,0 +1,40 @@
+name: Legal partner operations checks
+on:
+  pull_request:
+    paths: ['backend/laravel/**', '.github/workflows/legal-partners.yml']
+permissions:
+  contents: read
+jobs:
+  legal:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        database: [sqlite, mysql]
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci_root_only
+          MYSQL_DATABASE: fdb_legal_ci
+          MYSQL_USER: fdb_ci
+          MYSQL_PASSWORD: fdb_ci_only
+        ports: ['3306/tcp']
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    defaults:
+      run:
+        working-directory: backend/laravel
+    steps:
+      - uses: actions/checkout@v4
+      - run: mkdir -p bootstrap/cache storage/framework/{cache/data,sessions,views} storage/logs
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: find app routes database tests -name '*.php' -print0 | xargs -0 -n1 php -l
+      - run: php tests/legal-partners.php
+        env:
+          APP_ENV: testing
+          APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          RESEND_API_KEY: fake_test_only
+          LEGAL_TEST_MYSQL_PORT: ${{ matrix.database == 'mysql' && job.services.mysql.ports[3306] || '' }}
