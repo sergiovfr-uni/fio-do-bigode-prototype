@@ -46,6 +46,7 @@ class ListingController extends Controller
             'price'=>['required','numeric','min:0.01'],
             'accepts_trade'=>['sometimes','boolean'],
         ]);
+        \App\Services\ListingCategoryService::assertAvailable($data['category']);
         abort_unless(str_starts_with($data['cover_image'],'data:image/'), 422, 'A imagem principal é inválida.');
 
         $listing = $user->listings()->create([
@@ -71,6 +72,7 @@ class ListingController extends Controller
             'price'=>['required','numeric','min:0.01'],
             'accepts_trade'=>['sometimes','boolean'],
         ]);
+        \App\Services\ListingCategoryService::assertAvailable($data['category'], $listing->category);
         if (!empty($data['cover_image'])) {
             abort_unless(str_starts_with($data['cover_image'], 'data:image/'), 422, 'A imagem principal é inválida.');
         } else {

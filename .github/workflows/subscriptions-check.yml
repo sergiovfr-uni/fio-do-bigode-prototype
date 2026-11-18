@@ -32,3 +32,38 @@ jobs:
         env:
           APP_ENV: testing
           APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+
+      - run: php tests/admin-listings.php
+        env:
+          APP_ENV: testing
+          APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+
+  admin-listings-mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: fdb_ci_root_only
+          MYSQL_DATABASE: fdb_admin_listing_ci
+          MYSQL_USER: fdb_ci
+          MYSQL_PASSWORD: fdb_ci_only
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    defaults:
+      run:
+        working-directory: backend/laravel
+    steps:
+      - uses: actions/checkout@v4
+      - run: mkdir -p bootstrap/cache storage/framework/{cache/data,sessions,views} storage/logs
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: php tests/admin-listings.php
+        env:
+          APP_ENV: testing
+          APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          ADMIN_LISTINGS_MYSQL_PORT: ${{ job.services.mysql.ports[3306] }}
