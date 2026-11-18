@@ -48,6 +48,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/community-partners', [CommunityPartnerController::class, 'index']);
     Route::post('/campaigns/{campaign}/impression', [CampaignController::class, 'impression']);
     Route::post('/campaigns/{campaign}/click', [CampaignController::class, 'click']);
+    Route::get('/listing-categories', [\App\Http\Controllers\Api\ListingCategoryController::class, 'index']);
     Route::get('/listings', [ListingController::class, 'index']);
     Route::get('/listings/{listing}', [ListingController::class, 'show']);
     Route::get('/witness-invitations/{code}', [WitnessInvitationController::class, 'show'])->middleware('throttle:30,1');
@@ -115,6 +116,9 @@ Route::prefix('v1')->group(function () {
             Route::get('/users', [AdminController::class, 'users']);
             Route::get('/deals', [AdminController::class, 'deals']);
             Route::get('/listings', [AdminController::class, 'listings']);
+            Route::get('/listing-categories', [\App\Http\Controllers\Api\ListingCategoryController::class, 'adminIndex']);
+            Route::post('/listing-categories', [\App\Http\Controllers\Api\ListingCategoryController::class, 'store']);
+            Route::put('/listing-categories/{category}', [\App\Http\Controllers\Api\ListingCategoryController::class, 'update']);
             Route::get('/wallets', [AdminController::class, 'wallets']);
             Route::get('/installments', [AdminController::class, 'installments']);
             Route::get('/campaigns', [AdminController::class, 'campaigns']);

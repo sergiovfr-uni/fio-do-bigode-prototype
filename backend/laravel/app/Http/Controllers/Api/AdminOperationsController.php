@@ -158,8 +158,11 @@ class AdminOperationsController extends Controller
     public function createListing(Request $request)
     {
         $data = $this->validateListing($request);
-        $seller = User::whereKey($data['seller_id'])->where('is_admin',false)->firstOrFail();
-        abort_unless($seller->kyc_status === 'verified', 422, 'O vendedor precisa ter KYC verificado.');
+        if (!empty($data['seller_id'])) {
+            $seller = User::whereKey($data['seller_id'])->where('is_admin',false)->firstOrFail();
+            abort_unless($seller->kyc_status === 'verified', 422, 'O vendedor precisa ter KYC verificado.');
+        }
+        $data['seller_id'] = $data['seller_id'] ?? null;
         if (($data['status'] ?? 'draft') === 'published') abort_unless(!empty($data['cover_image']), 422, 'Informe a imagem principal para publicar.');
         $listing = Listing::create([
             ...$data,
@@ -188,7 +191,7 @@ class AdminOperationsController extends Controller
         ]);
         if ($data['status']==='published') {
             abort_unless($listing->cover_image, 422, 'O anúncio precisa de uma imagem para ser publicado.');
-            abort_unless($listing->seller?->kyc_status==='verified', 422, 'O vendedor precisa ter KYC verificado.');
+            abort_unless($listing->seller_id === null || $listing->seller?->kyc_status==='verified', 422, 'O vendedor precisa ter KYC verificado.');
         }
         $before = ['status'=>$listing->status,'published_at'=>$listing->published_at,'expires_at'=>$listing->expires_at];
         $listing->update([
@@ -500,7 +503,7 @@ class AdminOperationsController extends Controller
     private function validateListing(Request $request, ?Listing $listing = null): array
     {
         $data = $request->validate([
-            'seller_id'=>[$listing ? 'sometimes' : 'required','integer','exists:users,id'],
+            'seller_id'=>['nullable','integer','exists:users,id'],
             'category'=>['required','string','max:60'],
             'title'=>['required','string','max:180'],
             'description'=>['required','string','max:5000'],
@@ -509,6 +512,7 @@ class AdminOperationsController extends Controller
             'accepts_trade'=>['sometimes','boolean'],
             'status'=>['sometimes',Rule::in(['draft','published','archived'])],
         ]);
+        \App\Services\ListingCategoryService::assertAvailable($data['category'], $listing?->category);
         if (!empty($data['cover_image'])) abort_unless((bool)preg_match('#^data:image/(jpeg|png|webp);base64,#',$data['cover_image']), 422, 'A imagem deve ser JPG, PNG ou WebP.');
         if ($listing) unset($data['seller_id'],$data['status']);
         return $data;

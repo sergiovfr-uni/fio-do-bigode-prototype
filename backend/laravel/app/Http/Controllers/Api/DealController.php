@@ -53,6 +53,7 @@ class DealController extends Controller
 
     public function fromListing(Request $request, Listing $listing, DealEventService $events)
     {
+        abort_if($listing->seller_id === null, 422, 'Anúncio publicado pela administração. Não recebe propostas de negociação.');
         app(\App\Services\SubscriptionEntitlementService::class)->requireCurrent($request->user());
         abort_unless($listing->status === 'published', 404);
         abort_if((int) $listing->seller_id === (int) $request->user()->id, 422, 'Você não pode fazer proposta no próprio anúncio.');
