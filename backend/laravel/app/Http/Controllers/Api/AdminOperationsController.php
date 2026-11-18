@@ -113,6 +113,7 @@ class AdminOperationsController extends Controller
             'reason'=>['required','string','min:5','max:500'],
         ]);
         $plan = Plan::whereKey($data['plan_id'])->where('active',true)->firstOrFail();
+        abort_unless(($plan->audience ?? 'user') === 'user', 422, 'Planos jurídicos são exclusivos para escritórios e não podem ser atribuídos a usuários do app.');
         abort_if($plan->complimentary && $data['status'] !== 'active', 422, 'Cortesia deve ser atribuída como ativa.');
         abort_if(!$plan->complimentary && empty($data['days']), 422, 'Informe o prazo do plano.');
         $before = Subscription::where('user_id',$user->id)->whereIn('status',['trial','active'])->get()->toArray();
@@ -482,16 +483,26 @@ class AdminOperationsController extends Controller
 
     private function validatePlan(Request $request, ?Plan $plan = null): array
     {
+        $audience = $request->input('audience', $plan?->audience ?? 'user');
+        $legal = $audience === 'legal_partner';
         $data = $request->validate([
+            'audience'=>['sometimes',Rule::in(['user','legal_partner'])],
             'slug'=>['required','string','max:60','regex:/^[a-z0-9-]+$/',Rule::unique('plans','slug')->ignore($plan?->id)],
             'name'=>['required','string','max:120'],
             'monthly_price'=>['required','numeric','min:0','max:99999.99'],
-            'active_listing_limit'=>['required','integer','min:0','max:10000'],
-            'direct_deal_limit'=>['required','integer','min:0','max:10000'],
+            'active_listing_limit'=>[$legal ? 'nullable' : 'required','integer','min:0','max:10000'],
+            'direct_deal_limit'=>[$legal ? 'nullable' : 'required','integer','min:0','max:10000'],
             'active'=>['sometimes','boolean'],
             'admin_only'=>['sometimes','boolean'],
             'complimentary'=>['sometimes','boolean'],
         ]);
+        $data['audience'] = $audience;
+        if ($plan) abort_unless($audience === ($plan->audience ?? 'user'), 422, 'O público de um plano existente não pode ser alterado. Crie um novo plano.');
+        if ($legal) {
+            $data['active_listing_limit'] = 0;
+            $data['direct_deal_limit'] = 0;
+            $data['admin_only'] = true;
+        }
         abort_if(($data['complimentary'] ?? $plan?->complimentary) && ((float)$data['monthly_price'] !== 0.0 || !($data['admin_only'] ?? $plan?->admin_only)), 422, 'Cortesia deve ser gratuita e exclusiva da administração.');
         if ($plan) {
             abort_unless($data['slug']===$plan->slug, 422, 'O identificador de um plano existente não pode ser alterado.');
