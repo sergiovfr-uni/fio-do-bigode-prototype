@@ -1,82 +1,32 @@
-# Fio do Bigode — Onboarding de Parceiro Jurídico por Convite
+# Rede Jurídica — operação por convite
 
-## Regra de produto
+## Fluxo implementado
 
-A Rede Jurídica é fechada. Não existe cadastro público de escritório.
+1. Admin emite convite individual por e-mail (1 a 30 dias). Só o hash do token é armazenado. Reemissão troca o token; uso, revogação ou expiração impedem cadastro.
+2. Escritório aceita a política e cadastra os dados usando o e-mail convidado. Estado inicial: `pending_review`. Não cria usuário comum e não libera acesso.
+3. Admin confere cadastro e libera plano `legal_partner` ativo até uma data definida. `payment_confirmed` exige referência e `payment_reviewed=true`; `manual` registra liberação sem afirmar pagamento. Ambas exigem justificativa.
+4. Escritório recebe código no e-mail para entrar no portal `/parceiro-juridico/acesso/`. Código de uso único, dez minutos, cinco tentativas; sessão jurídica de até oito horas.
+5. Admin encaminha uma solicitação com consentimento registrado a um escritório ativo e com vigência válida. Não há distribuição automática. Somente pedidos com consentimento explícito `legal-case-sharing-20261118` podem compartilhar o dossiê; pedidos antigos exigem cancelamento e nova autorização no app.
+6. Parceiro consulta dossiê e documentos, registra notas privadas e status do atendimento. Não altera contratos, parcelas ou pagamentos.
+7. Reatribuição remove acesso anterior; notas privadas não passam ao novo escritório. Cancelamento pelo solicitante remove o acesso pela plataforma. Downloads já realizados não são apagados.
 
-Somente o Admin pode gerar convite individual. O convite leva à página exclusiva `/parceiro-juridico/?convite={token}`. O envio do formulário cria uma candidatura em `pending_review`; não libera acesso, assinatura nem recebimento de leads.
+## Rotas principais — prefixo `/api/v1`
 
-## Estados
+- Admin: GET/POST `/admin/legal-partner-invitations`; POST `/{id}/resend` e `/{id}/revoke`.
+- Cadastro: GET `/legal-partner-invitations/{token}`; POST `/legal-partner-applications` com `invitation_token`, dados cadastrais e `consent=true`.
+- Admin: GET `/admin/legal-partners`; PUT `/admin/legal-partners/{id}` para correções cadastrais (sem trocar e-mail de acesso); POST `/admin/legal-partners/{id}/activate` com `plan_id`, `access_until`, `activation_method`, `reason` e confirmação/referência quando pago; POST `/{id}/status` para `suspended`, `blocked`, `rejected`.
+- Admin: GET `/admin/legal-requests`; POST `/admin/legal-requests/{action}/assign` com `legal_partner_id` e `reason`.
+- Login: POST `/legal/auth/code` com `email`; POST `/legal/auth/verify` com `challenge_id` e `code`.
+- Parceiro autenticado: GET `/legal/me`, GET `/legal/cases`, GET `/legal/cases/{id}`; POST `/{id}/status`, POST `/{id}/notes`; GET `/{id}/documents/{document}`; POST `/legal/logout`.
+- Solicitante autenticado: POST `/deals/{deal}/legal-support/{action}/cancel`.
 
-Convite: `pending` → `used` ou `expired` / `revoked`.
+## Segurança e operação
 
-Parceiro: `pending_review` → `active` ou `rejected`. Após aprovação: `active` ↔ `suspended` / `blocked`.
-
-Somente `active`, com assinatura válida, pode receber lead.
-
-## Admin — convites
-
-### POST /api/v1/admin/legal-partner-invitations
-Body mínimo:
-```json
-{"email":"contato@escritorio.com.br","office_name":"Escritório Exemplo","expires_in_days":7}
-```
-Resposta:
-```json
-{"id":12,"status":"pending","invite_url":"https://nofiodobigode.app.br/parceiro-juridico/?convite=TOKEN","expires_at":"2026-09-07T23:59:59-03:00"}
-```
-
-### GET /api/v1/admin/legal-partner-invitations
-Lista convites e estados.
-
-### POST /api/v1/admin/legal-partner-invitations/{id}/revoke
-Revoga convite ainda não utilizado.
-
-### POST /api/v1/admin/legal-partner-invitations/{id}/resend
-Reenvia o convite e registra auditoria.
-
-## Página exclusiva do escritório
-
-### GET /api/v1/legal-partner-invitations/{token}
-Valida token sem autenticação administrativa. Retorna apenas dados mínimos do convite.
-
-### POST /api/v1/legal-partner-applications
-Body inclui `invitation_token`, `office_name`, `document`, `contact_name`, `oab`, `email`, `phone`, `city`, `state`, `service_regions`, `specialties`, `notes`.
-
-Regras:
-- token válido, não expirado e não revogado;
-- um token só conclui uma candidatura;
-- CNPJ e e-mail normalizados e validados;
-- candidatura nasce em `pending_review`;
-- nenhuma credencial operacional é liberada nesse momento;
-- registrar IP/data/hora e aceite de privacidade conforme política aplicável.
-
-## Admin — parceiros
-
-### GET /api/v1/admin/legal-partners
-Lista parceiros e candidaturas, incluindo status de análise, assinatura, região, especialidades e leads.
-
-### GET /api/v1/admin/legal-partners/{id}
-Detalhe completo para visualização humana.
-
-### PUT /api/v1/admin/legal-partners/{id}
-Edição administrativa dos dados permitidos.
-
-### POST /api/v1/admin/legal-partners/{id}/approve
-Aprova candidatura. Pode definir plano, mensalidade, regiões e especialidades. Só depois da aprovação e das regras comerciais aplicáveis o acesso operacional é liberado.
-
-### POST /api/v1/admin/legal-partners/{id}/reject
-Reprova com justificativa auditável.
-
-### POST /api/v1/admin/legal-partners/{id}/status
-Permite `active`, `suspended` ou `blocked`, sempre com justificativa e auditoria.
-
-## Segurança
-
-Tokens de convite devem ser aleatórios, de alta entropia, armazenados preferencialmente como hash, expirar e ser de uso único. A página não deve revelar se determinado CNPJ/e-mail já pertence à rede antes de validar o convite.
-
-Bloqueio ou suspensão deve impedir novo login operacional e novos leads, preservando histórico. Aprovação, rejeição, edição, bloqueio, desbloqueio, geração/reenvio/revogação de convite e visualização de dados sensíveis devem gerar log de auditoria.
-
-## E-mail
-
-A geração do convite envia e-mail ao endereço definido pelo Admin com o link seguro. O e-mail não contém dados sensíveis. Falha de envio não invalida o convite e deve permitir reenvio administrativo.
+- Identidade e token do escritório são separados do usuário do app. Token jurídico não acessa APIs de consumidor/admin; token comum não acessa o portal jurídico.
+- Status, vigência e plano são conferidos em cada acesso. Suspensão revoga sessões e desafios de login.
+- Dossiê e downloads exigem atribuição atual e consentimento não cancelado. Respostas privadas usam `Cache-Control: private, no-store`.
+- Documentos são baixados por rotas autenticadas, sem token na URL. O portal não usa dados fictícios nem armazena dossiês em localStorage.
+- Aprovação não verifica automaticamente OAB/CNPJ. A conferência humana é responsabilidade do admin.
+- Falha de envio de e-mail é informada ao admin. Acesso e encaminhamento registrados permanecem válidos e podem ser consultados no painel.
+- Sem gateway ou cobrança automática; o registro manual de pagamento não executa transação financeira.
+- Demonstração permanece separada em `/parceiro-juridico/painel/`.

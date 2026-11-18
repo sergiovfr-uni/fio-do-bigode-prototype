@@ -1,7 +1,7 @@
 name: Legal partner demo checks
 on:
   pull_request:
-    paths: ['parceiro-juridico/painel/**', 'admin-final-adjustments.js', 'tests/legal-partner-demo.cjs', '.github/workflows/legal-partner-demo.yml']
+    paths: ['parceiro-juridico/painel/**', 'parceiro-juridico/acesso/**', 'admin/app.js', 'tests/legal-partner-live.cjs', 'tests/legal-partner-admin.cjs', 'admin-final-adjustments.js', 'tests/legal-partner-demo.cjs', '.github/workflows/legal-partner-demo.yml']
 permissions:
   contents: read
 jobs:
@@ -12,3 +12,6 @@ jobs:
       - run: node --check parceiro-juridico/painel/app.js
       - run: node --check admin-final-adjustments.js
       - run: node tests/legal-partner-demo.cjs
+      - run: node --check parceiro-juridico/acesso/app.js
+      - run: node tests/legal-partner-live.cjs
+      - run: node tests/legal-partner-admin.cjs
